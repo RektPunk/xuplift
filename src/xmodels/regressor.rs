@@ -32,6 +32,15 @@ impl Regressor {
         let num_features = self.kernel_feature_map.num_features;
         let num_bases = self.kernel_feature_map.num_bases;
 
+        // Validate that the number of rows in the feature map matches the number of target values
+        if num_rows != y.nrows() {
+            panic!(
+                "Mismatched dimensions: The number of rows in the feature map ({}) must match the number of target values ({}).",
+                num_rows,
+                y.nrows()
+            );
+        }
+
         // Calculate the mean of target 'y' to center the data
         self.base_value = y.iter().sum::<f32>() / num_rows as f32;
         let y_centered = y - Col::<f32>::full(num_rows, self.base_value);
@@ -74,19 +83,25 @@ impl Regressor {
     ///
     /// It maps X to the kernel space and calculates the weighted sum of contributions.
     pub fn predict(&self, x: &Mat<f32>) -> Col<f32> {
+        // Validate that the number of columns in the input matches the number of features in the feature map
+        let num_features = self.kernel_feature_map.num_features;
+        let num_rows = x.nrows();
+        if num_features != x.ncols() {
+            panic!(
+                "Mismatched dimensions: The number of columns in the feature map ({}) must match the number of input columns ({}).",
+                num_features,
+                x.ncols()
+            );
+        }
         // Map raw input to the feature space
         let z_matrices = self.kernel_feature_map.transform(x);
 
         // Parallel computation of y_pred = Sum(Z_i * coeff_i)
-        let prediction = (0..self.kernel_feature_map.num_features)
+        let prediction = (0..num_features)
             .into_par_iter()
-            .map(|f_idx| {
-                let z_batch = &z_matrices[f_idx];
-                let coeff = &self.coefficients[f_idx];
-                z_batch * coeff
-            })
+            .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx]) // Z_i * coeff_i
             .reduce(
-                || Col::<f32>::zeros(x.nrows()),
+                || Col::<f32>::zeros(num_rows),
                 |mut acc, res| {
                     acc += res;
                     acc
@@ -94,5 +109,30 @@ impl Regressor {
             );
         // Restore the target scale by adding back the base value (mean)
         prediction.map(|v| v + self.base_value)
+    }
+
+    /// Explains the model's prediction by decomposing it into individual feature contributions.
+    ///
+    /// For each feature $i$, it calculates the contribution $C_i = Z_i \cdot \alpha_i$,
+    /// resulting in a matrix where each column represents the contribution of a specific feature.
+    pub fn explain(&self, x: &Mat<f32>) -> Mat<f32> {
+        // Validate that the number of columns in the input matches the number of features in the feature map
+        let num_features = self.kernel_feature_map.num_features;
+        if num_features != x.ncols() {
+            panic!(
+                "Mismatched dimensions: The number of columns in the feature map ({}) must match the number of input columns ({}).",
+                num_features,
+                x.ncols()
+            );
+        }
+        // Map raw input to the feature space
+        let z_matrices = self.kernel_feature_map.transform(x);
+
+        // Parallel computation of comtribution vec
+        let contributions_vec: Vec<Col<f32>> = (0..num_features)
+            .into_par_iter()
+            .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
+            .collect();
+        Mat::from_fn(x.nrows(), num_features, |i, j| contributions_vec[j][i])
     }
 }
