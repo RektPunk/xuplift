@@ -1,9 +1,9 @@
 pub mod feature_map;
-pub mod models;
+pub mod xmodels;
 
 pub use crate::feature_map::KernelFeatureMap;
-pub use crate::models::classifier::Classifier;
-pub use crate::models::regressor::Regressor;
+pub use crate::xmodels::classifier::Classifier;
+pub use crate::xmodels::regressor::Regressor;
 
 #[cfg(test)]
 mod tests {
