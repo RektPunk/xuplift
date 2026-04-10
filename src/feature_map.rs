@@ -7,6 +7,7 @@ use rayon::prelude::*;
 ///
 /// It maps input data into a finite-dimensional feature space where linear
 /// operations approximate non-linear kernels (e.g., RBF kernel).
+#[derive(Default)]
 pub struct KernelFeatureMap {
     // Learned Parameters
     /// Total number of rows in the training data.
