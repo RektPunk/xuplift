@@ -322,7 +322,7 @@ dependencies = [
  "private-gemm-x86",
  "pulp",
  "rand 0.9.2",
- "rand_distr 0.5.1",
+ "rand_distr",
  "rayon",
  "reborrow",
  "spindle",
@@ -1052,16 +1052,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rand_distr"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d431c2703ccf129de4d45253c03f49ebb22b97d6ad79ee3ecfc7e3f4862c1d8"
-dependencies = [
- "num-traits",
- "rand 0.10.0",
-]
-
-[[package]]
 name = "raw-cpuid"
 version = "11.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1629,7 +1619,6 @@ version = "0.1.0"
 dependencies = [
  "faer",
  "rand 0.10.0",
- "rand_distr 0.6.0",
  "rayon",
 ]
 
