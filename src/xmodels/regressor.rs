@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use faer::prelude::Solve;
 use faer::{Col, Mat};
 use rayon::prelude::*;
@@ -7,7 +9,7 @@ use crate::feature_map::KernelFeatureMap;
 /// A Ridge Regressor that uses transformed non-linear features.
 pub struct Regressor {
     /// The kernel_feature_map responsible for kernel-based feature mapping.
-    pub kernel_feature_map: KernelFeatureMap,
+    pub kernel_feature_map: Arc<KernelFeatureMap>,
     /// The global mean of the target variable (used for centering).
     pub base_value: f32,
     /// Learned coefficients for each feature block.
@@ -16,7 +18,7 @@ pub struct Regressor {
 
 impl Regressor {
     /// Creates a new Regressor instance with a fitted KernelFeatureMap.
-    pub fn new(kernel_feature_map: KernelFeatureMap) -> Self {
+    pub fn new(kernel_feature_map: Arc<KernelFeatureMap>) -> Self {
         Self {
             kernel_feature_map,
             base_value: 0.0,
@@ -136,3 +138,54 @@ impl Regressor {
         Mat::from_fn(x.nrows(), num_features, |i, j| contributions_vec[j][i])
     }
 }
+
+// /// A Ridge Regressor
+// pub struct RidgeRegressor {
+//     /// The global mean of the target variable (used for centering).
+//     pub base_value: f32,
+//     /// Learned coefficients for each feature block.
+//     pub coefficients: Col<f32>,
+// }
+
+// impl RidgeRegressor {
+//     /// Creates a new RidgeRegressor instance.
+//     pub fn new() -> Self {
+//         Self {
+//             base_value: 0.0,
+//             coefficients: Col::zeros(0),
+//         }
+//     }
+
+//     /// Fits the model using Global Ridge Regression.
+//     ///
+//     /// This method solves the system: (Z^T * Z + lambda * I) * alpha = Z^T * y_centered
+//     pub fn fit(&mut self, x: &Mat<f32>, y: &Col<f32>) {
+//         let num_rows = x.nrows();
+//         let num_features = x.ncols();
+
+//         // Calculate the mean of target 'y' to center the data
+//         self.base_value = y.iter().sum::<f32>() / num_rows as f32;
+//         let y_centered = y - Col::<f32>::full(num_rows, self.base_value);
+
+//         // Construct and solve the Normal Equation: (X^T * X + lambda * I)
+//         let lhs = &x.transpose() * x;
+//         let mut ridge_lhs = lhs;
+
+//         // Add L2 regularization (Ridge) to the diagonal for numerical stability
+//         let lambda = 0.01;
+//         for i in 0..num_features {
+//             ridge_lhs[(i, i)] += lambda; // Ridge regularization
+//         }
+//         let rhs = &x.transpose() * &y_centered;
+
+//         // Solve the linear system using LDLT decomposition
+//         self.coefficients = ridge_lhs.ldlt(faer::Side::Lower).unwrap().solve(&rhs);
+//     }
+
+//     /// Predicts target values for the given input matrix X.
+//     ///
+//     /// It maps X to the kernel space and calculates the weighted sum of contributions.
+//     pub fn predict(&self, x: &Mat<f32>) -> Col<f32> {
+//         (x * &self.coefficients).map(|v| v + self.base_value)
+//     }
+// }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use faer::{Col, Mat};
 
 use crate::feature_map::KernelFeatureMap;
@@ -5,9 +7,8 @@ use crate::xmodels::regressor::Regressor;
 
 /// S-Learner (Single Learner) for Uplift Modeling using a Kernel-based Regressor.
 ///
-/// This learner treats the treatment assignment as an additional feature in a single
-/// response surface model. The Individual Treatment Effect (ITE) is estimated by
-/// taking the difference between predictions with the treatment feature set to 1 and 0.
+/// This learner treats the treatment assignment as an additional feature in a single response surface model.
+/// The Individual Treatment Effect (ITE) is estimated by taking the difference between predictions with the treatment feature set to 1 and 0.
 pub struct SLearner {
     /// The underlying Regressor trained on augmented features (X, T).
     pub regressor: Regressor,
@@ -20,9 +21,6 @@ impl SLearner {
     /// * `x` - The original feature matrix (n_samples x n_features).
     /// * `t` - The treatment assignment vector (n_samples, 0 or 1).
     /// * `y` - The observed outcome vector.
-    ///
-    /// This method automatically handles feature augmentation, kernel mapping,
-    /// and regression fitting.
     pub fn new(x: &Mat<f32>, t: &Col<f32>, y: &Col<f32>) -> Self {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
@@ -42,9 +40,10 @@ impl SLearner {
         // Initialize and fit the KernelFeatureMap with the augmented dimension (k + 1)
         let mut feature_map = KernelFeatureMap::new();
         feature_map.fit(&x_combined);
+        let map_arc = Arc::new(feature_map);
 
         // Initialize and fit the Regressor using the generated kernel features
-        let mut regressor = Regressor::new(feature_map);
+        let mut regressor = Regressor::new(map_arc);
         regressor.fit(y);
 
         Self { regressor }

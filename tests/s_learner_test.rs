@@ -1,4 +1,5 @@
 use faer::{Col, Mat};
+
 use xuplift::metalearners::s_learner::SLearner;
 
 #[test]
