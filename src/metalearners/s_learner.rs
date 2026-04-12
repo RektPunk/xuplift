@@ -1,6 +1,7 @@
+use faer::{Col, Mat};
+
 use crate::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
-use faer::{Col, Mat};
 
 /// S-Learner (Single Learner) for Uplift Modeling using a Kernel-based Regressor.
 ///
