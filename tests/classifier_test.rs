@@ -1,31 +1,35 @@
 use faer::{Col, Mat};
+use rand::RngExt;
 
 pub use xuplift::feature_map::KernelFeatureMap;
 pub use xuplift::xmodels::classifier::Classifier;
 pub use xuplift::xmodels::regressor::Regressor;
-
 #[test]
 fn test_gaussian_classification() {
-    use rand_distr::{Distribution, Normal};
     let mut rng = rand::rng();
     let n_samples = 300;
     let n_features = 2;
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // 1. Generate Gaussian Blobs
-    // Create two distinct clusters (Class 0 and Class 1) using normal distributions.
-    let dist1 = Normal::new(-1.5, 0.7).unwrap();
-    let dist2 = Normal::new(1.5, 0.7).unwrap();
+    // Generates a sample from a normal distribution with given mean and std_dev.
+    let mut sample_normal = |mean: f32, std_dev: f32| -> f32 {
+        let u1: f32 = rng.random_range(0.0..1.0); // Uniform(0, 1)
+        let u2: f32 = rng.random_range(0.0..1.0);
+        // Standard normal (mean=0, std=1)
+        let z0 = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f32::consts::PI * u2).cos();
+        z0 * std_dev + mean
+    };
 
+    // Generate Gaussian Blobs
     for i in 0..n_samples {
         if i < n_samples / 2 {
-            x[(i, 0)] = dist1.sample(&mut rng);
-            x[(i, 1)] = dist1.sample(&mut rng);
+            x[(i, 0)] = sample_normal(-1.5, 0.7);
+            x[(i, 1)] = sample_normal(-1.5, 0.7);
             y[i] = 0.0;
         } else {
-            x[(i, 0)] = dist2.sample(&mut rng);
-            x[(i, 1)] = dist2.sample(&mut rng);
+            x[(i, 0)] = sample_normal(1.5, 0.7);
+            x[(i, 1)] = sample_normal(1.5, 0.7);
             y[i] = 1.0;
         }
     }
