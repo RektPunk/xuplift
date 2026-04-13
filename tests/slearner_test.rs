@@ -1,6 +1,6 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::s_learner::SLearner;
+use xuplift::metalearners::slearner::SLearner;
 
 #[test]
 fn test_slearner_constant_uplift() {
@@ -77,5 +77,5 @@ fn test_slearner_constant_uplift() {
             uplift_estimate[i]
         );
     }
-    println!("Uplift Delta Explanation check passed!");
+    println!("SLearner Uplift Delta Explanation check passed!");
 }

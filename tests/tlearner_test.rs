@@ -1,6 +1,6 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::t_learner::TLearner;
+use xuplift::metalearners::tlearner::TLearner;
 
 #[test]
 fn test_tlearner_constant_uplift() {
