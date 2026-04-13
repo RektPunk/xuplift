@@ -40,9 +40,9 @@ impl XLearner {
 
         // Create sub-matrices
         let x_t1 = data_utils::filter_rows(x, &indices_t1);
-        let y_t1 = data_utils::filter_cols_vec(y, &indices_t1);
+        let y_t1 = data_utils::filter_elements(y, &indices_t1);
         let x_t0 = data_utils::filter_rows(x, &indices_t0);
-        let y_t0 = data_utils::filter_cols_vec(y, &indices_t0);
+        let y_t0 = data_utils::filter_elements(y, &indices_t0);
 
         // Train Model for T=1
         let mut map_t1 = KernelFeatureMap::new();

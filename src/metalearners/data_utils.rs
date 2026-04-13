@@ -13,7 +13,7 @@ pub fn filter_rows(x: &Mat<f32>, indices: &[usize]) -> Mat<f32> {
 }
 
 // Helper to create sliced column vectors
-pub fn filter_cols_vec(y: &Col<f32>, indices: &[usize]) -> Col<f32> {
+pub fn filter_elements(y: &Col<f32>, indices: &[usize]) -> Col<f32> {
     let mut filtered = Col::<f32>::zeros(indices.len());
     for (new_idx, &old_idx) in indices.iter().enumerate() {
         filtered[new_idx] = y[old_idx];

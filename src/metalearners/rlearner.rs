@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
+use faer::{Col, Mat};
+
 use crate::feature_map::KernelFeatureMap;
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
-use faer::{Col, Mat};
-use std::sync::Arc;
 
 /// R-Learner for Uplift Modeling.
 ///
