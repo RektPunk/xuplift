@@ -59,17 +59,10 @@ impl RLearner {
 
         for i in 0..num_rows {
             y_tilde[i] = y[i] - mu_pred[i];
-            t_tilde[i] = t[i] - p_pred[i];
+            t_tilde[i] = t[i] - p_pred[i].clamp(0.01, 0.99);
 
             // Objective: Minimize (y_tilde - t_tilde * tau)^2
-            // Simplest implementation: tau = y_tilde / t_tilde
-            // Use a small epsilon to prevent division by zero.
-            let eps = 1e-5;
-            if t_tilde[i].abs() < eps {
-                r_target[i] = y_tilde[i] / (eps * t_tilde[i].signum());
-            } else {
-                r_target[i] = y_tilde[i] / t_tilde[i];
-            };
+            r_target[i] = y_tilde[i] / t_tilde[i];
         }
 
         // Train the final tau model on the R-objective target
