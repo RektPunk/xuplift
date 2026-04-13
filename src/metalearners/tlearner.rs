@@ -3,6 +3,7 @@ use std::sync::Arc;
 use faer::{Col, Mat};
 
 use crate::feature_map::KernelFeatureMap;
+use crate::metalearners::data_utils;
 use crate::xmodels::regressor::Regressor;
 
 /// T-Learner (Two-Learner) for Uplift Modeling using Kernel-based Regressors.
@@ -32,11 +33,11 @@ impl TLearner {
         let indices_t0: Vec<usize> = (0..num_rows).filter(|&i| t[i] <= 0.5).collect();
 
         // Create sub-matrices
-        let x_t1 = Self::filter_rows(x, &indices_t1);
-        let y_t1 = Self::filter_cols_vec(y, &indices_t1);
+        let x_t1 = data_utils::filter_rows(x, &indices_t1);
+        let y_t1 = data_utils::filter_cols_vec(y, &indices_t1);
 
-        let x_t0 = Self::filter_rows(x, &indices_t0);
-        let y_t0 = Self::filter_cols_vec(y, &indices_t0);
+        let x_t0 = data_utils::filter_rows(x, &indices_t0);
+        let y_t0 = data_utils::filter_cols_vec(y, &indices_t0);
 
         // Train Model for T=1
         let mut map_t1 = KernelFeatureMap::new();
@@ -77,26 +78,5 @@ impl TLearner {
         let exp_t1 = self.regressor_t1.explain(x);
         let exp_t0 = self.regressor_t0.explain(x);
         exp_t1 - exp_t0
-    }
-
-    // Helper to create sliced matrices
-    fn filter_rows(x: &Mat<f32>, indices: &[usize]) -> Mat<f32> {
-        let mut filtered = Mat::<f32>::zeros(indices.len(), x.ncols());
-        for (new_idx, &old_idx) in indices.iter().enumerate() {
-            filtered
-                .as_mut()
-                .row_mut(new_idx)
-                .copy_from(x.as_ref().row(old_idx));
-        }
-        filtered
-    }
-
-    // Helper to create sliced column vectors
-    fn filter_cols_vec(y: &Col<f32>, indices: &[usize]) -> Col<f32> {
-        let mut filtered = Col::<f32>::zeros(indices.len());
-        for (new_idx, &old_idx) in indices.iter().enumerate() {
-            filtered[new_idx] = y[old_idx];
-        }
-        filtered
     }
 }
