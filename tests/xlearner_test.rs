@@ -3,7 +3,7 @@ use faer::{Col, Mat};
 use xuplift::metalearners::xlearner::XLearner;
 
 #[test]
-fn test_xlearner_imbalanced_uplift() {
+fn test_xlearner() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -74,7 +74,8 @@ fn test_xlearner_imbalanced_uplift() {
 
         // Calculate Dynamic Base Value: g(x)*base_tau0 + (1-g(x))*base_tau1
         let gi = propensity[i].clamp(0.01, 0.99);
-        let dynamic_base = gi * xlearner.tau_0.base_value + (1.0 - gi) * xlearner.tau_1.base_value;
+        let dynamic_base =
+            gi * xlearner.tau_t0.base_value + (1.0 - gi) * xlearner.tau_t1.base_value;
 
         let reconstructed_uplift = feature_contribution_sum + dynamic_base;
 

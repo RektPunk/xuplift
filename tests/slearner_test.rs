@@ -3,7 +3,7 @@ use faer::{Col, Mat};
 use xuplift::metalearners::slearner::SLearner;
 
 #[test]
-fn test_slearner_constant_uplift() {
+fn test_slearner() {
     let n_samples = 500;
     let n_features = 3;
 

@@ -11,24 +11,12 @@ use crate::xmodels::regressor::Regressor;
 /// Based on Robinson's transformation, this learner focuses on the residual-on-residual
 /// regression to directly estimate the Heterogeneous Treatment Effect (HTE).
 pub struct RLearner {
-    /// Outcome nuisance model mu(x) = E[Y|X]
-    pub mu: Regressor,
-
-    /// Propensity nuisance model p(x) = E[T|X]
-    pub p: Classifier,
-
     /// Treatment effect model
     pub tau: Regressor,
 }
 
 impl RLearner {
     /// Initializes and fits the RLearner using the provided data.
-    ///
-    /// The training process follows these steps:
-    /// 1. Train m(x) to predict Y from X.
-    /// 2. Train p(x) to predict T from X (Propensity).
-    /// 3. Compute residuals: Y_tilde = Y - m(x) and T_tilde = T - p(x).
-    /// 4. Train tau(x) by regressing Y_tilde on T_tilde.
     ///
     /// # Arguments
     /// * `x` - The original feature matrix (n_samples x n_features).
@@ -73,7 +61,7 @@ impl RLearner {
         let mut tau = Regressor::new(Arc::new(tau_map));
         tau.fit(&r_target);
 
-        Self { mu, p, tau }
+        Self { tau }
     }
 
     /// Estimates the uplift score: $\hat{\tau}(x) = \arg\min_{\tau} \sum [ (Y - m(x)) - (T - e(x)) \cdot \tau(x) ]^2$

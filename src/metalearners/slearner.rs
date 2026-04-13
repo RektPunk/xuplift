@@ -11,7 +11,7 @@ use crate::xmodels::regressor::Regressor;
 /// The Individual Treatment Effect (ITE) is estimated by taking the difference between predictions with the treatment feature set to 1 and 0.
 pub struct SLearner {
     /// The underlying Regressor trained on augmented features (X, T).
-    pub regressor: Regressor,
+    pub mu: Regressor,
 }
 
 impl SLearner {
@@ -43,10 +43,10 @@ impl SLearner {
         let map_arc = Arc::new(feature_map);
 
         // Initialize and fit the Regressor using the generated kernel features
-        let mut regressor = Regressor::new(map_arc);
-        regressor.fit(y);
+        let mut mu = Regressor::new(map_arc);
+        mu.fit(y);
 
-        Self { regressor }
+        Self { mu }
     }
 
     /// Estimates the uplift score: $\tau(x) = E[Y | X=x, T=1] - E[Y | X=x, T=0]$
@@ -63,11 +63,11 @@ impl SLearner {
 
         // Case 1: Treatment = 1
         scratch.as_mut().col_mut(num_cols).fill(1.0);
-        let pred_t1 = self.regressor.predict(&scratch);
+        let pred_t1 = self.mu.predict(&scratch);
 
         // Case 2: Treatment = 0
         scratch.as_mut().col_mut(num_cols).fill(0.0);
-        let pred_t0 = self.regressor.predict(&scratch);
+        let pred_t0 = self.mu.predict(&scratch);
 
         pred_t1 - pred_t0
     }
@@ -90,7 +90,7 @@ impl SLearner {
             .submatrix_mut(0, 0, num_rows, num_cols)
             .copy_from(x);
         x_t1.as_mut().col_mut(num_cols).fill(1.0);
-        let exp_t1 = self.regressor.explain(&x_t1);
+        let exp_t1 = self.mu.explain(&x_t1);
 
         // Calculate feature contributions under the control scenario (T=0)
         let mut x_t0 = Mat::<f32>::zeros(num_rows, num_cols + 1);
@@ -98,7 +98,7 @@ impl SLearner {
             .submatrix_mut(0, 0, num_rows, num_cols)
             .copy_from(x);
         x_t0.as_mut().col_mut(num_cols).fill(0.0);
-        let exp_t0 = self.regressor.explain(&x_t0);
+        let exp_t0 = self.mu.explain(&x_t0);
 
         // The difference reveals the source of the treatment effect
         exp_t1 - exp_t0

@@ -3,7 +3,7 @@ use faer::{Col, Mat};
 use xuplift::metalearners::tlearner::TLearner;
 
 #[test]
-fn test_tlearner_constant_uplift() {
+fn test_tlearner() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -76,7 +76,7 @@ fn test_tlearner_constant_uplift() {
         }
 
         // We must also account for the difference in base_values (intercepts) between the two independent models.
-        let base_value_diff = tlearner.regressor_t1.base_value - tlearner.regressor_t0.base_value;
+        let base_value_diff = tlearner.mu_t1.base_value - tlearner.mu_t0.base_value;
         let total_reconstructed_uplift = explained_total + base_value_diff;
 
         assert!(

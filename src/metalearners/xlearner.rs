@@ -12,13 +12,9 @@ use crate::xmodels::regressor::Regressor;
 /// This meta-learner is designed to handle significant class imbalance between
 /// treatment and control groups by cross-predicting counterfactuals.
 pub struct XLearner {
-    /// Outcome models
-    pub mu_1: Regressor,
-    pub mu_0: Regressor,
-
     /// Imputed effect models
-    pub tau_1: Regressor,
-    pub tau_0: Regressor,
+    pub tau_t1: Regressor,
+    pub tau_t0: Regressor,
 
     /// Propensity model to weight the uplift estimates
     pub p: Classifier,
@@ -44,14 +40,14 @@ impl XLearner {
         let x_t0 = data_utils::filter_rows(x, &indices_t0);
         let y_t0 = data_utils::filter_elements(y, &indices_t0);
 
-        // Train Model for T=1
+        // Train outcome model for T=1
         let mut map_t1 = KernelFeatureMap::new();
         map_t1.fit(&x_t1);
         let map_t1_arc = Arc::new(map_t1);
         let mut mu_1 = Regressor::new(Arc::clone(&map_t1_arc));
         mu_1.fit(&y_t1);
 
-        // Train Model for T=0
+        // Train outcome model for T=0
         let mut map_t0 = KernelFeatureMap::new();
         map_t0.fit(&x_t0);
         let map_t0_arc = Arc::new(map_t0);
@@ -66,10 +62,10 @@ impl XLearner {
         let d_0 = &mu_1.predict(&x_t0) - &y_t0;
 
         // Train tau models to estimate these imputed treatment effects (D_1, D_0)
-        let mut tau_1 = Regressor::new(map_t1_arc);
-        tau_1.fit(&d_1);
-        let mut tau_0 = Regressor::new(map_t0_arc);
-        tau_0.fit(&d_0);
+        let mut tau_t1 = Regressor::new(map_t1_arc);
+        tau_t1.fit(&d_1);
+        let mut tau_t0 = Regressor::new(map_t0_arc);
+        tau_t0.fit(&d_0);
 
         // Train Propensity Model (g): Predict T given X
         let mut propensity_map = KernelFeatureMap::new();
@@ -78,20 +74,14 @@ impl XLearner {
         let mut p = Classifier::new(propensity_map_arc);
         p.fit(t, 20);
 
-        Self {
-            mu_1,
-            mu_0,
-            tau_1,
-            tau_0,
-            p,
-        }
+        Self { tau_t1, tau_t0, p }
     }
 
     /// Estimates the uplift score: $\tau(x) = g(x)\hat{\tau}_0(x) + (1 - g(x))\hat{\tau}_1(x)$
     pub fn predict_uplift(&self, x: &Mat<f32>) -> Col<f32> {
         let g = self.p.predict(x); // P(T=1 | X)
-        let t_1 = self.tau_1.predict(x);
-        let t_0 = self.tau_0.predict(x);
+        let t_1 = self.tau_t1.predict(x);
+        let t_0 = self.tau_t0.predict(x);
 
         let mut uplift = Col::<f32>::zeros(x.nrows());
         for i in 0..x.nrows() {
@@ -105,16 +95,16 @@ impl XLearner {
     ///
     /// This method calculates the "Weighted Incremental Contribution" of each feature.
     /// Since the X-Learner prediction is a weighted sum of two tau models, the explanation
-    /// is similarly derived by blending the feature-level contributions of $\tau_1$ and $\tau_0$:
-    /// $Exp(x) = g(x) \cdot Exp_{\tau_0}(x) + (1 - g(x)) \cdot Exp_{\tau_1}(x)$
+    /// is similarly derived by blending the feature-level contributions of $\tau_t1$ and $\tau_t0$:
+    /// $Exp(x) = g(x) \cdot Exp_{\tau_t0}(x) + (1 - g(x)) \cdot Exp_{\tau_t1}(x)$
     ///
     /// # Returns
     /// A matrix (n_samples x n_features) representing how much each feature contributes to the final uplift score for each sample.
     pub fn explain_uplift(&self, x: &Mat<f32>) -> Mat<f32> {
         let g = self.p.predict(x); // P(T=1 | X)
 
-        let exp_t1 = self.tau_1.explain(x);
-        let exp_t0 = self.tau_0.explain(x);
+        let exp_t1 = self.tau_t1.explain(x);
+        let exp_t0 = self.tau_t0.explain(x);
 
         let n_rows = x.nrows();
         let n_cols = x.ncols();
