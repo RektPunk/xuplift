@@ -11,15 +11,15 @@ use crate::xmodels::regressor::Regressor;
 /// This meta-learner is designed to handle significant class imbalance between
 /// treatment and control groups by cross-predicting counterfactuals.
 pub struct XLearner {
-    /// Outcome models (Stage 1)
+    /// Outcome models
     pub mu_1: Regressor,
     pub mu_0: Regressor,
 
-    /// Imputed effect models (Stage 2)
+    /// Imputed effect models
     pub tau_1: Regressor,
     pub tau_0: Regressor,
 
-    /// Propensity model to weight the uplift estimates (Stage 3)
+    /// Propensity model to weight the uplift estimates
     pub p: Classifier,
 }
 
@@ -86,7 +86,7 @@ impl XLearner {
         }
     }
 
-    /// Predicts the Individual Treatment Effect (ITE / Uplift).
+    /// Estimates the uplift score: $\tau(x) = g(x)\hat{\tau}_0(x) + (1 - g(x))\hat{\tau}_1(x)$
     pub fn predict_uplift(&self, x: &Mat<f32>) -> Col<f32> {
         let g = self.p.predict(x); // P(T=1 | X)
         let t_1 = self.tau_1.predict(x);
@@ -100,6 +100,15 @@ impl XLearner {
         uplift
     }
 
+    /// Explains the uplift by decomposing the weighted feature contributions.
+    ///
+    /// This method calculates the "Weighted Incremental Contribution" of each feature.
+    /// Since the X-Learner prediction is a weighted sum of two tau models, the explanation
+    /// is similarly derived by blending the feature-level contributions of $\tau_1$ and $\tau_0$:
+    /// $Exp(x) = g(x) \cdot Exp_{\tau_0}(x) + (1 - g(x)) \cdot Exp_{\tau_1}(x)$
+    ///
+    /// # Returns
+    /// A matrix (n_samples x n_features) representing how much each feature contributes to the final uplift score for each sample.
     pub fn explain_uplift(&self, x: &Mat<f32>) -> Mat<f32> {
         let g = self.p.predict(x); // P(T=1 | X)
 
@@ -115,6 +124,7 @@ impl XLearner {
         })
     }
 
+    // Helper to create sliced matrices
     fn filter_rows(x: &Mat<f32>, indices: &[usize]) -> Mat<f32> {
         let mut filtered = Mat::<f32>::zeros(indices.len(), x.ncols());
         for (new_idx, &old_idx) in indices.iter().enumerate() {
@@ -126,6 +136,7 @@ impl XLearner {
         filtered
     }
 
+    // Helper to create sliced column vectors
     fn filter_cols_vec(y: &Col<f32>, indices: &[usize]) -> Col<f32> {
         let mut filtered = Col::<f32>::zeros(indices.len());
         for (new_idx, &old_idx) in indices.iter().enumerate() {

@@ -4,7 +4,7 @@ use xuplift::metalearners::xlearner::XLearner;
 
 #[test]
 fn test_xlearner_imbalanced_uplift() {
-    let n_samples = 400;
+    let n_samples = 500;
     let n_features = 3;
 
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
@@ -29,7 +29,7 @@ fn test_xlearner_imbalanced_uplift() {
         t[i] = treatment;
 
         // Outcome with a constant treatment effect of 5.0
-        y[i] = 1.5 * x0 + 0.5 * x1 + (5.0 * treatment) + 10.0;
+        y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
     // 2. Model Training

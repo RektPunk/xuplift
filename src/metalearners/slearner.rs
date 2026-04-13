@@ -49,12 +49,7 @@ impl SLearner {
         Self { regressor }
     }
 
-    /// Estimates the uplift score (Conditional Average Treatment Effect).
-    ///
-    /// It calculates: $\tau(x) = E[Y | X=x, T=1] - E[Y | X=x, T=0]$
-    ///
-    /// # Arguments
-    /// * `x` - The feature matrix for which to estimate uplift.
+    /// Estimates the uplift score: $\tau(x) = E[Y | X=x, T=1] - E[Y | X=x, T=0]$
     pub fn predict_uplift(&self, x: &Mat<f32>) -> Col<f32> {
         let num_rows = x.nrows();
         let num_cols = x.ncols();

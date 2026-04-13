@@ -8,7 +8,7 @@ pub use xuplift::xmodels::regressor::Regressor;
 
 #[test]
 fn test_noisy_regression() {
-    let n_samples = 100;
+    let n_samples = 500;
     let n_features = 3; // Using 3 features for multi-variable test
 
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
