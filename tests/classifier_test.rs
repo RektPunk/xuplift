@@ -1,9 +1,12 @@
+use std::sync::Arc;
+
 use faer::{Col, Mat};
 use rand::RngExt;
 
 pub use xuplift::feature_map::KernelFeatureMap;
 pub use xuplift::xmodels::classifier::Classifier;
 pub use xuplift::xmodels::regressor::Regressor;
+
 #[test]
 fn test_gaussian_classification() {
     let mut rng = rand::rng();
@@ -38,10 +41,11 @@ fn test_gaussian_classification() {
     // Project input features into a high-dimensional space using the Nystrom approximation.
     let mut map = KernelFeatureMap::new();
     map.fit(&x);
+    let map_arc = Arc::new(map);
 
     // 3. Setup and Fit Classifier (IRLS)
     // Train a Logistic Regression model using Iteratively Reweighted Least Squares (IRLS).
-    let mut model = Classifier::new(map);
+    let mut model = Classifier::new(map_arc);
     model.fit(&y, 20); // Perform 20 iterations for convergence
 
     // 4. Verify Accuracy

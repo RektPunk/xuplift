@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use faer::prelude::Solve;
 use faer::{Col, Mat};
 use rayon::prelude::*;
@@ -7,7 +9,7 @@ use crate::feature_map::KernelFeatureMap;
 /// A Ridge Regressor that uses transformed non-linear features.
 pub struct Regressor {
     /// The kernel_feature_map responsible for kernel-based feature mapping.
-    pub kernel_feature_map: KernelFeatureMap,
+    pub kernel_feature_map: Arc<KernelFeatureMap>,
     /// The global mean of the target variable (used for centering).
     pub base_value: f32,
     /// Learned coefficients for each feature block.
@@ -16,7 +18,7 @@ pub struct Regressor {
 
 impl Regressor {
     /// Creates a new Regressor instance with a fitted KernelFeatureMap.
-    pub fn new(kernel_feature_map: KernelFeatureMap) -> Self {
+    pub fn new(kernel_feature_map: Arc<KernelFeatureMap>) -> Self {
         Self {
             kernel_feature_map,
             base_value: 0.0,

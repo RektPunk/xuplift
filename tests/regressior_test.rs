@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use faer::{Col, Mat};
 
 pub use xuplift::feature_map::KernelFeatureMap;
@@ -33,10 +35,11 @@ fn test_noisy_regression() {
     // into a latent space suitable for kernel-based regression.
     let mut map = KernelFeatureMap::new();
     map.fit(&x);
+    let map_arc = Arc::new(map);
 
     // 3. Setup and Fit Regressor
     // Initialize the Regressor with the fitted map and solve for coefficients.
-    let mut model = Regressor::new(map);
+    let mut model = Regressor::new(map_arc);
     model.fit(&y);
 
     // 4. Verify Prediction Accuracy (MAE)

@@ -1,8 +1,9 @@
 use faer::{Col, Mat};
-use xuplift::metalearners::s_learner::SLearner;
+
+use xuplift::metalearners::tlearner::TLearner;
 
 #[test]
-fn test_slearner_constant_uplift() {
+fn test_tlearner_constant_uplift() {
     let n_samples = 200;
     let n_features = 3;
 
@@ -26,20 +27,23 @@ fn test_slearner_constant_uplift() {
         // Assign treatment: Even indices = Treatment (1), Odd indices = Control (0)
         let treatment = if i % 2 == 0 { 1.0 } else { 0.0 };
         t[i] = treatment;
+
+        // Outcome depends on X and a clear Treatment effect (2.0)
         y[i] = 1.5 * x0 + 0.5 * x1 + (2.0 * treatment) + 10.0;
     }
 
     // 2. Model Training
-    // Initialize SLearner which internally handles feature augmentation and kernel mapping.
-    let slearner = SLearner::new(&x, &t, &y);
+    // Initialize TLearner which splits data into T=1 and T=0 and trains two regressors.
+    let tlearner = TLearner::new(&x, &t, &y);
 
     // 3. Uplift Estimation
-    // Estimate Individual Treatment Effect (ITE) using the counterfactual approach:
-    // τ(x) = E[Y|X, T=1] - E[Y|X, T=0]
-    let uplift_estimate = slearner.predict_uplift(&x);
+    // Estimate Individual Treatment Effect (ITE) by subtracting
+    // the control model's prediction from the treatment model's prediction.
+    // τ(x) = μ_1(x) - μ_0(x)
+    let uplift_estimate = tlearner.predict_uplift(&x);
 
     // 4. Accuracy Verification
-    // Check if the average estimated uplift converges to the true effect (2.0).
+    // Verify if the average estimated uplift is close to the true effect (2.0).
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -58,23 +62,30 @@ fn test_slearner_constant_uplift() {
     );
 
     // 5. Explanation Consistency Check
-    // Verify that the sum of feature contribution deltas matches the predicted uplift.
+    // In T-Learner, the explanation is the difference between two models' contributions.
     // Mathematical Consistency: Σ(Contribution_T1 - Contribution_T0) == Predict_T1 - Predict_T0
-    let uplift_explanation = slearner.explain_uplift(&x);
+    let uplift_explanation = tlearner.explain_uplift(&x);
+
+    // T-Learner's explanation matrix should have n_features columns (no T column).
+    assert_eq!(uplift_explanation.ncols(), n_features);
+
     for i in 0..x.nrows() {
         let mut explained_total = 0.0;
         for j in 0..uplift_explanation.ncols() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // The total explained uplift must match the actual prediction score for each sample.
+        // We must also account for the difference in base_values (intercepts) between the two independent models.
+        let base_value_diff = tlearner.regressor_t1.base_value - tlearner.regressor_t0.base_value;
+        let total_reconstructed_uplift = explained_total + base_value_diff;
+
         assert!(
-            (explained_total - uplift_estimate[i]).abs() < 1e-4,
+            (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
             "Uplift explanation delta mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
             i,
-            explained_total,
+            total_reconstructed_uplift,
             uplift_estimate[i]
         );
     }
-    println!("Uplift Delta Explanation check passed!");
+    println!("TLearner Uplift Delta Explanation check passed!");
 }

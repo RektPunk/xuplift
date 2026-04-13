@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use faer::{Col, Mat};
 
 use crate::feature_map::KernelFeatureMap;
@@ -29,8 +31,7 @@ impl TLearner {
         let indices_t1: Vec<usize> = (0..num_rows).filter(|&i| t[i] > 0.5).collect();
         let indices_t0: Vec<usize> = (0..num_rows).filter(|&i| t[i] <= 0.5).collect();
 
-        // Helper to create sub-matrices (faer's slicing would be more memory efficient,
-        // but for kernel fitting, we often need owned or contiguous data)
+        // Create sub-matrices
         let x_t1 = Self::filter_rows(x, &indices_t1);
         let y_t1 = Self::filter_cols_vec(y, &indices_t1);
 
@@ -40,13 +41,15 @@ impl TLearner {
         // Train Model for T=1
         let mut map_t1 = KernelFeatureMap::new();
         map_t1.fit(&x_t1);
-        let mut regressor_t1 = Regressor::new(map_t1);
+        let map_t1_arc = Arc::new(map_t1);
+        let mut regressor_t1 = Regressor::new(map_t1_arc);
         regressor_t1.fit(&y_t1);
 
         // Train Model for T=0
         let mut map_t0 = KernelFeatureMap::new();
         map_t0.fit(&x_t0);
-        let mut regressor_t0 = Regressor::new(map_t0);
+        let map_t0_arc = Arc::new(map_t0);
+        let mut regressor_t0 = Regressor::new(map_t0_arc);
         regressor_t0.fit(&y_t0);
 
         Self {
@@ -76,7 +79,7 @@ impl TLearner {
         exp_t1 - exp_t0
     }
 
-    // Private Helper Methods for Data Slicing
+    // Helper to create sliced matrices
     fn filter_rows(x: &Mat<f32>, indices: &[usize]) -> Mat<f32> {
         let mut filtered = Mat::<f32>::zeros(indices.len(), x.ncols());
         for (new_idx, &old_idx) in indices.iter().enumerate() {
@@ -88,6 +91,7 @@ impl TLearner {
         filtered
     }
 
+    // Helper to create sliced column vectors
     fn filter_cols_vec(y: &Col<f32>, indices: &[usize]) -> Col<f32> {
         let mut filtered = Col::<f32>::zeros(indices.len());
         for (new_idx, &old_idx) in indices.iter().enumerate() {
