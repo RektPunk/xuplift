@@ -10,7 +10,7 @@ pub use xuplift::xmodels::regressor::Regressor;
 #[test]
 fn test_gaussian_classification() {
     let mut rng = rand::rng();
-    let n_samples = 300;
+    let n_samples = 500;
     let n_features = 2;
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
     let mut y = Col::<f32>::zeros(n_samples);

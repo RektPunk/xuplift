@@ -3,8 +3,8 @@ use faer::{Col, Mat};
 use xuplift::metalearners::slearner::SLearner;
 
 #[test]
-fn test_slearner_constant_uplift() {
-    let n_samples = 200;
+fn test_slearner() {
+    let n_samples = 500;
     let n_features = 3;
 
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
@@ -27,7 +27,7 @@ fn test_slearner_constant_uplift() {
         // Assign treatment: Even indices = Treatment (1), Odd indices = Control (0)
         let treatment = if i % 2 == 0 { 1.0 } else { 0.0 };
         t[i] = treatment;
-        y[i] = 1.5 * x0 + 0.5 * x1 + (2.0 * treatment) + 10.0;
+        y[i] = 1.5 * x0 + 0.5 * x1.sin() + (2.0 * treatment) + 10.0;
     }
 
     // 2. Model Training

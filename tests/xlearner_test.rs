@@ -3,8 +3,8 @@ use faer::{Col, Mat};
 use xuplift::metalearners::xlearner::XLearner;
 
 #[test]
-fn test_xlearner_imbalanced_uplift() {
-    let n_samples = 400;
+fn test_xlearner() {
+    let n_samples = 500;
     let n_features = 3;
 
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
@@ -29,7 +29,7 @@ fn test_xlearner_imbalanced_uplift() {
         t[i] = treatment;
 
         // Outcome with a constant treatment effect of 5.0
-        y[i] = 1.5 * x0 + 0.5 * x1 + (5.0 * treatment) + 10.0;
+        y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
     // 2. Model Training
@@ -74,7 +74,8 @@ fn test_xlearner_imbalanced_uplift() {
 
         // Calculate Dynamic Base Value: g(x)*base_tau0 + (1-g(x))*base_tau1
         let gi = propensity[i].clamp(0.01, 0.99);
-        let dynamic_base = gi * xlearner.tau_0.base_value + (1.0 - gi) * xlearner.tau_1.base_value;
+        let dynamic_base =
+            gi * xlearner.tau_t0.base_value + (1.0 - gi) * xlearner.tau_t1.base_value;
 
         let reconstructed_uplift = feature_contribution_sum + dynamic_base;
 
