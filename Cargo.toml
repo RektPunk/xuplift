@@ -3,6 +3,10 @@ name = "xuplift"
 version = "0.0.1"
 edition = "2024"
 
+[lib]
+name = "xuplift"
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 faer = "0.24.0"
 numpy = "0.28.0"
