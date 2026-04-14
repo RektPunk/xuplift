@@ -3,8 +3,8 @@ use faer::{Col, Mat};
 use xuplift::metalearners::tlearner::TLearner;
 
 #[test]
-fn test_tlearner_constant_uplift() {
-    let n_samples = 200;
+fn test_tlearner() {
+    let n_samples = 500;
     let n_features = 3;
 
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
@@ -29,7 +29,7 @@ fn test_tlearner_constant_uplift() {
         t[i] = treatment;
 
         // Outcome depends on X and a clear Treatment effect (2.0)
-        y[i] = 1.5 * x0 + 0.5 * x1 + (2.0 * treatment) + 10.0;
+        y[i] = 1.5 * x0 + 0.5 * x1.sin() + (2.0 * treatment) + 10.0;
     }
 
     // 2. Model Training
@@ -76,7 +76,7 @@ fn test_tlearner_constant_uplift() {
         }
 
         // We must also account for the difference in base_values (intercepts) between the two independent models.
-        let base_value_diff = tlearner.regressor_t1.base_value - tlearner.regressor_t0.base_value;
+        let base_value_diff = tlearner.mu_t1.base_value - tlearner.mu_t0.base_value;
         let total_reconstructed_uplift = explained_total + base_value_diff;
 
         assert!(
