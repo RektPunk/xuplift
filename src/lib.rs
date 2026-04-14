@@ -17,6 +17,7 @@ pub use crate::xmodels::regressor::Regressor;
 fn xuplift(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<python::PyClassifier>()?;
     m.add_class::<python::PyRegressor>()?;
+
     m.add_class::<python::PyRLearner>()?;
     m.add_class::<python::PySLearner>()?;
     m.add_class::<python::PyTLearner>()?;
