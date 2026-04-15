@@ -16,46 +16,20 @@ pub use crate::metalearners::xlearner::XLearner;
 
 fn convert_to_faer_mat(x: PyReadonlyArray2<f32>) -> Mat<f32> {
     let x_view = x.as_array();
-    let n = x_view.nrows();
-    let p = x_view.ncols();
-    let mut x_mat = Mat::<f32>::zeros(n, p);
-    for j in 0..p {
-        for i in 0..n {
-            x_mat[(i, j)] = x_view[[i, j]];
-        }
-    }
-    x_mat
+    Mat::from_fn(x_view.nrows(), x_view.ncols(), |i, j| x_view[[i, j]])
 }
 
 fn convert_to_faer_col(x: PyReadonlyArray1<f32>) -> Col<f32> {
     let x_view = x.as_array();
-    let n = x_view.len();
-    let mut x_col = Col::<f32>::zeros(n);
-    for i in 0..n {
-        x_col[i] = x_view[i];
-    }
-    x_col
+    Col::from_fn(x_view.len(), |i| x_view[i])
 }
 
 fn convert_to_numpy_mat(x: Mat<f32>) -> Array2<f32> {
-    let n = x.nrows();
-    let p = x.ncols();
-    let mut x_mat = Array2::<f32>::zeros((n, p));
-    for i in 0..n {
-        for j in 0..p {
-            x_mat[[i, j]] = x[(i, j)];
-        }
-    }
-    x_mat
+    Array2::from_shape_fn((x.nrows(), x.ncols()), |(i, j)| x[(i, j)])
 }
 
 fn convert_to_numpy_col(x: Col<f32>) -> Array1<f32> {
-    let n = x.nrows();
-    let mut x_col = Array1::<f32>::zeros(n);
-    for i in 0..n {
-        x_col[i] = x[i];
-    }
-    x_col
+    Array1::from_iter(x.iter().copied())
 }
 
 fn prepare_input(
