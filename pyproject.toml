@@ -1,0 +1,24 @@
+[project]
+name = "xuplift"
+version = "0.0.1"
+description = "Explainable uplift modeling via linearized kernel feature maps."
+authors = [
+    {name = "RektPunk", email = "rektpunk@gmail.com"},
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.24.4",
+]
+
+[project.urls]
+repository = "https://github.com/RektPunk/xuplift"
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+python-source = "python"
+module-name = "xuplift"
+include = ["python/xuplift/*.pyi", "python/xuplift/py.typed"]

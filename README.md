@@ -10,6 +10,17 @@
   </a>
 </p>
 
-Explainable uplift modeling via linearized kernel feature maps.
+Explainable uplift modeling via linearized kernel feature maps, providing a collection of meta-learners.
 
-WIP
+# Installation
+Install using pip:
+```bash
+pip install xuplift
+```
+
+# Features
+- Regressor: High-performance regression engine for outcome and residual modeling.
+- Classifier: Optimized binary classifier for precise propensity score estimation.
+- RLearner: Advanced residual-on-residual estimator with built-in 2-fold cross-fitting to ensure unbiased treatment effect estimation.
+- XLearner: Optimized cross-learner designed to handle significantly unbalanced treatment groups.
+- TLearner/SLearner: Standard two-model and single-model estimators for baseline causal analysis.
