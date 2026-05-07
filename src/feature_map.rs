@@ -74,8 +74,8 @@ impl KernelFeatureMap {
         let n_valid = valid_row_indices.len();
 
         // Set the number of basis functions
-        // If we have enough "valid (not NaN)" rows (>= 32), we use them as landmark candidates.
-        // Otherwise, we fallback to all rows and use imputation for landmarks.
+        // If we have enough "valid" rows (all features are not NaN) (>= 32), we use them as landmark candidates.
+        // Otherwise, we fallback to all rows and use imputation (feature means) for landmarks.
         let landmark_indices = if n_valid >= 32 {
             self.num_bases = n_valid.min(64);
             let mut rng = rng();
@@ -111,7 +111,7 @@ impl KernelFeatureMap {
                         dists.push((val_i - val_j).abs());
                     }
                 }
-                dists.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                dists.sort_by(|a: &f32, b: &f32| a.partial_cmp(b).unwrap());
                 let median = if !dists.is_empty() {
                     let mid = dists.len() / 2;
                     if dists.len() % 2 == 0 {
