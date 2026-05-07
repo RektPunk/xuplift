@@ -25,7 +25,8 @@ impl TLearner {
     /// * `x` - The original feature matrix.
     /// * `t` - The treatment assignment vector (0 or 1).
     /// * `y` - The observed outcome vector.
-    pub fn new(x: &Mat<f32>, t: &Col<f32>, y: &Col<f32>) -> Self {
+    /// * `mu_penalty` - The regularization penalty for the regressor.
+    pub fn new(x: &Mat<f32>, t: &Col<f32>, y: &Col<f32>, mu_penalty: f32) -> Self {
         let num_rows = x.nrows();
 
         // Identify indices for T=1 and T=0
@@ -43,14 +44,14 @@ impl TLearner {
         let mut map_t1 = KernelFeatureMap::new();
         map_t1.fit(&x_t1);
         let map_t1_arc = Arc::new(map_t1);
-        let mut mu_t1 = Regressor::new(map_t1_arc);
+        let mut mu_t1 = Regressor::new(map_t1_arc, mu_penalty);
         mu_t1.fit(&y_t1);
 
         // Train Model for T=0
         let mut map_t0 = KernelFeatureMap::new();
         map_t0.fit(&x_t0);
         let map_t0_arc = Arc::new(map_t0);
-        let mut mu_t0 = Regressor::new(map_t0_arc);
+        let mut mu_t0 = Regressor::new(map_t0_arc, mu_penalty);
         mu_t0.fit(&y_t0);
 
         Self { mu_t1, mu_t0 }

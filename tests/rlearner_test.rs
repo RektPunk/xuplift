@@ -35,7 +35,7 @@ fn test_rlearner() {
 
     // 2. Model Training
     // R-Learner trains: m(x) [Outcome], e(x) [Propensity], and tau(x) [Residual-on-Residual]
-    let rlearner = RLearner::new(&x, &t, &y);
+    let rlearner = RLearner::new(&x, &t, &y, 0.1, 0.1, 20, 0.1);
 
     // 3. Uplift Estimation
     // In R-Learner, the tau model directly estimates the treatment effect.

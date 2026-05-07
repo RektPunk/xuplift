@@ -35,7 +35,7 @@ fn test_xlearner() {
     // 2. Model Training
     // X-Learner internally trains 5 models:
     // Stage 1: mu_1, mu_0 | Stage 2: tau_1, tau_0 | Stage 3: p (propensity)
-    let xlearner = XLearner::new(&x, &t, &y);
+    let xlearner = XLearner::new(&x, &t, &y, 0.1, 0.1, 20, 0.1);
 
     // 3. Uplift Estimation
     // The estimate uses the weighted average: g(x)*tau_0 + (1-g(x))*tau_1

@@ -32,7 +32,7 @@ fn test_slearner() {
 
     // 2. Model Training
     // Initialize SLearner which internally handles feature augmentation and kernel mapping.
-    let slearner = SLearner::new(&x, &t, &y);
+    let slearner = SLearner::new(&x, &t, &y, 0.01);
 
     // 3. Uplift Estimation
     // Estimate Individual Treatment Effect (ITE) using the counterfactual approach:

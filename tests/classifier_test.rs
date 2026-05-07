@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use faer::{Col, Mat, perm};
+use faer::{Col, Mat};
 use rand::RngExt;
 
 pub use xuplift::feature_map::KernelFeatureMap;

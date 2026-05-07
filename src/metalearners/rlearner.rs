@@ -22,22 +22,34 @@ impl RLearner {
     /// * `x` - The original feature matrix (n_samples x n_features).
     /// * `t` - The treatment assignment vector (n_samples, 0 or 1).
     /// * `y` - The observed outcome vector.
-    pub fn new(x: &Mat<f32>, t: &Col<f32>, y: &Col<f32>) -> Self {
+    /// * `mu_penalty` - The regularization penalty for the regressor.
+    /// * `p_penalty` - The regularization penalty for the propensity model.
+    /// * `p_max_iter` - The maximum number of iterations for the propensity model.
+    /// * `tau_penalty` - The regularization penalty for the treatment effect model.
+    pub fn new(
+        x: &Mat<f32>,
+        t: &Col<f32>,
+        y: &Col<f32>,
+        mu_penalty: f32,
+        p_penalty: f32,
+        p_max_iter: usize,
+        tau_penalty: f32,
+    ) -> Self {
         let num_rows = x.nrows();
 
         // Train mu(x): Outcome model (E[Y|X])
         let mut mu_map = KernelFeatureMap::new();
         mu_map.fit(x);
         let mu_map_arc = Arc::new(mu_map);
-        let mut mu = Regressor::new(Arc::clone(&mu_map_arc));
+        let mut mu = Regressor::new(Arc::clone(&mu_map_arc), mu_penalty);
         mu.fit(y);
 
         // Train p(x): Propensity model (E[T|X])
         let mut p_map = KernelFeatureMap::new();
         p_map.fit(x);
         let p_map_arc = Arc::new(p_map);
-        let mut p = Classifier::new(p_map_arc);
-        p.fit(t, 20); // 20 iterations for classifier
+        let mut p = Classifier::new(p_map_arc, p_penalty, p_max_iter);
+        p.fit(t);
 
         // Compute Residuals
         let mu_pred = mu.predict(x);
@@ -58,7 +70,7 @@ impl RLearner {
         // Train the final tau model on the R-objective target
         let mut tau_map = KernelFeatureMap::new();
         tau_map.fit(x);
-        let mut tau = Regressor::new(Arc::new(tau_map));
+        let mut tau = Regressor::new(Arc::new(tau_map), tau_penalty);
         tau.fit(&r_target);
 
         Self { tau }

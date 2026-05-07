@@ -50,18 +50,18 @@ pub struct PyClassifier {
 #[pymethods]
 impl PyClassifier {
     #[new]
-    fn new(x: PyReadonlyArray2<f32>) -> Self {
+    fn new(x: PyReadonlyArray2<f32>, penalty: f32, max_iter: usize) -> Self {
         let x_mat = convert_to_faer_mat(x);
         let mut map_x = KernelFeatureMap::new();
         map_x.fit(&x_mat);
         let map_t1_arc = Arc::new(map_x);
-        let classifier = Classifier::new(map_t1_arc);
+        let classifier = Classifier::new(map_t1_arc, penalty, max_iter);
         PyClassifier { inner: classifier }
     }
 
-    fn fit(&mut self, y: PyReadonlyArray1<f32>, max_iter: usize) {
+    fn fit(&mut self, y: PyReadonlyArray1<f32>) {
         let y_col = convert_to_faer_col(y);
-        self.inner.fit(&y_col, max_iter);
+        self.inner.fit(&y_col);
     }
 
     fn predict<'py>(
@@ -94,12 +94,12 @@ pub struct PyRegressor {
 #[pymethods]
 impl PyRegressor {
     #[new]
-    fn new(x: PyReadonlyArray2<f32>) -> Self {
+    fn new(x: PyReadonlyArray2<f32>, penalty: f32) -> Self {
         let x_mat = convert_to_faer_mat(x);
         let mut map_x = KernelFeatureMap::new();
         map_x.fit(&x_mat);
         let map_t1_arc = Arc::new(map_x);
-        let regressor = Regressor::new(map_t1_arc);
+        let regressor = Regressor::new(map_t1_arc, penalty);
         PyRegressor { inner: regressor }
     }
 
@@ -138,9 +138,25 @@ pub struct PyRLearner {
 #[pymethods]
 impl PyRLearner {
     #[new]
-    fn new(x: PyReadonlyArray2<f32>, t: PyReadonlyArray1<f32>, y: PyReadonlyArray1<f32>) -> Self {
+    fn new(
+        x: PyReadonlyArray2<f32>,
+        t: PyReadonlyArray1<f32>,
+        y: PyReadonlyArray1<f32>,
+        mu_penalty: f32,
+        p_penalty: f32,
+        p_max_iter: usize,
+        tau_penalty: f32,
+    ) -> Self {
         let (x_mat, t_col, y_col) = prepare_input(x, t, y);
-        let model = RLearner::new(&x_mat, &t_col, &y_col);
+        let model = RLearner::new(
+            &x_mat,
+            &t_col,
+            &y_col,
+            mu_penalty,
+            p_penalty,
+            p_max_iter,
+            tau_penalty,
+        );
         PyRLearner { inner: model }
     }
 
@@ -174,9 +190,14 @@ pub struct PySLearner {
 #[pymethods]
 impl PySLearner {
     #[new]
-    fn new(x: PyReadonlyArray2<f32>, t: PyReadonlyArray1<f32>, y: PyReadonlyArray1<f32>) -> Self {
+    fn new(
+        x: PyReadonlyArray2<f32>,
+        t: PyReadonlyArray1<f32>,
+        y: PyReadonlyArray1<f32>,
+        mu_penalty: f32,
+    ) -> Self {
         let (x_mat, t_col, y_col) = prepare_input(x, t, y);
-        let model = SLearner::new(&x_mat, &t_col, &y_col);
+        let model = SLearner::new(&x_mat, &t_col, &y_col, mu_penalty);
         PySLearner { inner: model }
     }
 
@@ -210,9 +231,14 @@ pub struct PyTLearner {
 #[pymethods]
 impl PyTLearner {
     #[new]
-    fn new(x: PyReadonlyArray2<f32>, t: PyReadonlyArray1<f32>, y: PyReadonlyArray1<f32>) -> Self {
+    fn new(
+        x: PyReadonlyArray2<f32>,
+        t: PyReadonlyArray1<f32>,
+        y: PyReadonlyArray1<f32>,
+        mu_penalty: f32,
+    ) -> Self {
         let (x_mat, t_col, y_col) = prepare_input(x, t, y);
-        let model = TLearner::new(&x_mat, &t_col, &y_col);
+        let model = TLearner::new(&x_mat, &t_col, &y_col, mu_penalty);
         PyTLearner { inner: model }
     }
 
@@ -246,9 +272,25 @@ pub struct PyXLearner {
 #[pymethods]
 impl PyXLearner {
     #[new]
-    fn new(x: PyReadonlyArray2<f32>, t: PyReadonlyArray1<f32>, y: PyReadonlyArray1<f32>) -> Self {
+    fn new(
+        x: PyReadonlyArray2<f32>,
+        t: PyReadonlyArray1<f32>,
+        y: PyReadonlyArray1<f32>,
+        mu_penalty: f32,
+        p_penalty: f32,
+        p_max_iter: usize,
+        tau_penalty: f32,
+    ) -> Self {
         let (x_mat, t_col, y_col) = prepare_input(x, t, y);
-        let model = XLearner::new(&x_mat, &t_col, &y_col);
+        let model = XLearner::new(
+            &x_mat,
+            &t_col,
+            &y_col,
+            mu_penalty,
+            p_penalty,
+            p_max_iter,
+            tau_penalty,
+        );
         PyXLearner { inner: model }
     }
 

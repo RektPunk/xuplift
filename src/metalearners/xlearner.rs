@@ -27,7 +27,19 @@ impl XLearner {
     /// * `x` - The original feature matrix (n_samples x n_features).
     /// * `t` - The treatment assignment vector (n_samples, 0 or 1).
     /// * `y` - The observed outcome vector.
-    pub fn new(x: &Mat<f32>, t: &Col<f32>, y: &Col<f32>) -> Self {
+    /// * `mu_penalty` - The regularization penalty for the regressor.
+    /// * `p_penalty` - The regularization penalty for the propensity model.
+    /// * `p_max_iter` - The maximum number of iterations for the propensity model.
+    /// * `tau_penalty` - The regularization penalty for the tau models.
+    pub fn new(
+        x: &Mat<f32>,
+        t: &Col<f32>,
+        y: &Col<f32>,
+        mu_penalty: f32,
+        p_penalty: f32,
+        p_max_iter: usize,
+        tau_penalty: f32,
+    ) -> Self {
         let num_rows = x.nrows();
 
         // Identify indices for T=1 and T=0
@@ -44,14 +56,14 @@ impl XLearner {
         let mut map_t1 = KernelFeatureMap::new();
         map_t1.fit(&x_t1);
         let map_t1_arc = Arc::new(map_t1);
-        let mut mu_1 = Regressor::new(Arc::clone(&map_t1_arc));
+        let mut mu_1 = Regressor::new(Arc::clone(&map_t1_arc), mu_penalty);
         mu_1.fit(&y_t1);
 
         // Train outcome model for T=0
         let mut map_t0 = KernelFeatureMap::new();
         map_t0.fit(&x_t0);
         let map_t0_arc = Arc::new(map_t0);
-        let mut mu_0 = Regressor::new(Arc::clone(&map_t0_arc));
+        let mut mu_0 = Regressor::new(Arc::clone(&map_t0_arc), mu_penalty);
         mu_0.fit(&y_t0);
 
         // Impute Treatment Effects and Train tau models
@@ -62,17 +74,17 @@ impl XLearner {
         let d_0 = &mu_1.predict(&x_t0) - &y_t0;
 
         // Train tau models to estimate these imputed treatment effects (D_1, D_0)
-        let mut tau_t1 = Regressor::new(map_t1_arc);
+        let mut tau_t1 = Regressor::new(map_t1_arc, tau_penalty);
         tau_t1.fit(&d_1);
-        let mut tau_t0 = Regressor::new(map_t0_arc);
+        let mut tau_t0 = Regressor::new(map_t0_arc, tau_penalty);
         tau_t0.fit(&d_0);
 
         // Train Propensity Model (g): Predict T given X
         let mut propensity_map = KernelFeatureMap::new();
         propensity_map.fit(x);
         let propensity_map_arc = Arc::new(propensity_map);
-        let mut p = Classifier::new(propensity_map_arc);
-        p.fit(t, 20);
+        let mut p = Classifier::new(propensity_map_arc, p_penalty, p_max_iter);
+        p.fit(t);
 
         Self { tau_t1, tau_t0, p }
     }
@@ -94,8 +106,8 @@ impl XLearner {
     /// Explains the uplift by decomposing the weighted feature contributions.
     ///
     /// This method calculates the "Weighted Incremental Contribution" of each feature.
-    /// Since the X-Learner prediction is a weighted sum of two tau models, the explanation
-    /// is similarly derived by blending the feature-level contributions of $\tau_t1$ and $\tau_t0$:
+    /// Since the X-Learner prediction is a weighted sum of two tau models,
+    /// the explanation is similarly derived by blending the feature-level contributions of $\tau_t1$ and $\tau_t0$:
     /// $Exp(x) = g(x) \cdot Exp_{\tau_t0}(x) + (1 - g(x)) \cdot Exp_{\tau_t1}(x)$
     ///
     /// # Returns

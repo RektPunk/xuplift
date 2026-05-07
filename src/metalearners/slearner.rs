@@ -21,7 +21,8 @@ impl SLearner {
     /// * `x` - The original feature matrix (n_samples x n_features).
     /// * `t` - The treatment assignment vector (n_samples, 0 or 1).
     /// * `y` - The observed outcome vector.
-    pub fn new(x: &Mat<f32>, t: &Col<f32>, y: &Col<f32>) -> Self {
+    /// * `mu_penalty` - The regularization penalty for the regressor.
+    pub fn new(x: &Mat<f32>, t: &Col<f32>, y: &Col<f32>, mu_penalty: f32) -> Self {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
         let mut x_combined = Mat::<f32>::zeros(num_rows, num_cols + 1);
@@ -43,7 +44,7 @@ impl SLearner {
         let map_arc = Arc::new(feature_map);
 
         // Initialize and fit the Regressor using the generated kernel features
-        let mut mu = Regressor::new(map_arc);
+        let mut mu = Regressor::new(map_arc, mu_penalty);
         mu.fit(y);
 
         Self { mu }
