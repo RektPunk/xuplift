@@ -10,6 +10,10 @@ use crate::feature_map::KernelFeatureMap;
 pub struct Classifier {
     /// The kernel_feature_map responsible for kernel-based feature mapping.
     pub kernel_feature_map: Arc<KernelFeatureMap>,
+    /// The Ridge regularization penalty factor.
+    pub penalty: f32,
+    /// The maximum number of iterations for the IRLS algorithm.
+    pub max_iter: usize,
     /// The global mean of the target variable, used as an implicit bias (intercept).
     pub base_value: f32,
     /// Learned weight coefficients for each feature block.
@@ -18,9 +22,11 @@ pub struct Classifier {
 
 impl Classifier {
     /// Creates a new Classifier instance with a fitted KernelFeatureMap.
-    pub fn new(kernel_feature_map: Arc<KernelFeatureMap>) -> Self {
+    pub fn new(kernel_feature_map: Arc<KernelFeatureMap>, penalty: f32, max_iter: usize) -> Self {
         Self {
             kernel_feature_map,
+            penalty,
+            max_iter,
             base_value: 0.0,
             coefficients: Vec::new(),
         }
@@ -35,7 +41,7 @@ impl Classifier {
     ///
     /// This implementation uses target centering (y - mean) to align with the Regressor's logic.
     /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column.
-    pub fn fit(&mut self, y: &Col<f32>, max_iter: usize) {
+    pub fn fit(&mut self, y: &Col<f32>) {
         let num_rows = self.kernel_feature_map.num_rows;
         let num_features = self.kernel_feature_map.num_features;
         let num_bases = self.kernel_feature_map.num_bases;
@@ -65,10 +71,9 @@ impl Classifier {
 
         // Initialize weights
         let mut w = Col::<f32>::zeros(total_dim);
-        let lambda = 0.01; // Ridge regularization for stability
 
         // IRLS Iteration
-        for _ in 0..max_iter {
+        for _ in 0..self.max_iter {
             // Current linear prediction: a = Z * w
             let curr_raw_pred = &z_stacked * &w;
 
@@ -92,7 +97,7 @@ impl Classifier {
             // Compute the Hessian matrix: H = Z^T * R * Z + lambda * I.
             let mut hessian = z_stacked.transpose() * &zw;
             for i in 0..total_dim {
-                hessian[(i, i)] += lambda;
+                hessian[(i, i)] += self.penalty;
             }
 
             // Solve the normal equations (H * delta_w = gradient) using LDLT decomposition.

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use faer::{Col, Mat};
+use faer::{Col, Mat, perm};
 use rand::RngExt;
 
 pub use xuplift::feature_map::KernelFeatureMap;
@@ -12,6 +12,7 @@ fn test_gaussian_classification() {
     let mut rng = rand::rng();
     let n_samples = 500;
     let n_features = 2;
+    let penalty = 0.01;
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
     let mut y = Col::<f32>::zeros(n_samples);
 
@@ -45,8 +46,8 @@ fn test_gaussian_classification() {
 
     // 3. Setup and Fit Classifier (IRLS)
     // Train a Logistic Regression model using Iteratively Reweighted Least Squares (IRLS).
-    let mut model = Classifier::new(map_arc);
-    model.fit(&y, 20); // Perform 20 iterations for convergence
+    let mut model = Classifier::new(map_arc, penalty, 20);
+    model.fit(&y); // Perform 20 iterations for convergence
 
     // 4. Verify Accuracy
     // Ensure that the model can linearly separate the kernel-mapped Gaussian blobs.

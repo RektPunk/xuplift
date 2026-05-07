@@ -13,6 +13,7 @@ fn test_regression() {
 
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
     let mut y = Col::<f32>::zeros(n_samples);
+    let penalty = 0.01;
 
     // 1. Generate Synthetic Multi-variable Data
     // Rule: y = 2.0*x0 - 1.5*x1 + 0.5*x2 + 5.0 (base_value)
@@ -39,7 +40,7 @@ fn test_regression() {
 
     // 3. Setup and Fit Regressor
     // Initialize the Regressor with the fitted map and solve for coefficients.
-    let mut model = Regressor::new(map_arc);
+    let mut model = Regressor::new(map_arc, penalty);
     model.fit(&y);
 
     // 4. Verify Prediction Accuracy (MAE)

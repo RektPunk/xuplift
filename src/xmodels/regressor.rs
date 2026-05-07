@@ -10,6 +10,8 @@ use crate::feature_map::KernelFeatureMap;
 pub struct Regressor {
     /// The kernel_feature_map responsible for kernel-based feature mapping.
     pub kernel_feature_map: Arc<KernelFeatureMap>,
+    /// The Ridge regularization penalty factor.
+    pub penalty: f32,
     /// The global mean of the target variable (used for centering).
     pub base_value: f32,
     /// Learned coefficients for each feature block.
@@ -18,9 +20,10 @@ pub struct Regressor {
 
 impl Regressor {
     /// Creates a new Regressor instance with a fitted KernelFeatureMap.
-    pub fn new(kernel_feature_map: Arc<KernelFeatureMap>) -> Self {
+    pub fn new(kernel_feature_map: Arc<KernelFeatureMap>, penalty: f32) -> Self {
         Self {
             kernel_feature_map,
+            penalty,
             base_value: 0.0,
             coefficients: Vec::new(),
         }
@@ -62,9 +65,8 @@ impl Regressor {
         let mut ridge_lhs = lhs;
 
         // Add L2 regularization (Ridge) to the diagonal for numerical stability
-        let lambda = 0.01;
         for i in 0..total_dim {
-            ridge_lhs[(i, i)] += lambda; // Ridge regularization
+            ridge_lhs[(i, i)] += self.penalty; // Ridge regularization
         }
         let rhs = z_stacked.transpose() * &y_centered;
 
