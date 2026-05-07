@@ -63,17 +63,9 @@ impl Classifier {
         // Initial probabilities based on the global intercept
         let initial_prob = p_clamped;
         let y_centered = y - Col::<f32>::full(num_rows, initial_prob);
-        let total_dim = num_features * num_bases;
 
-        // Aggregate all feature matrices from the kernel_feature_map into a single design matrix (Z)
-        let mut z_stacked = Mat::<f32>::zeros(num_rows, total_dim);
-        for (f_idx, z) in self.kernel_feature_map.z_matrices.iter().enumerate() {
-            let offset = f_idx * num_bases;
-            z_stacked
-                .as_mut()
-                .submatrix_mut(0, offset, num_rows, num_bases)
-                .copy_from(z);
-        }
+        // De-stacking is no longer needed during fit since we use block-based accumulation
+        let total_dim = num_features * num_bases;
 
         // Initialize weights
         let mut w = Col::<f32>::zeros(total_dim);
@@ -81,7 +73,13 @@ impl Classifier {
         // IRLS Iteration
         for _ in 0..self.max_iter {
             // Current linear prediction: a = Z * w
-            let curr_raw_pred = &z_stacked * &w;
+            // Compute this block by block: a = Sum(Z_i * w_i)
+            let mut curr_raw_pred = Col::<f32>::zeros(num_rows);
+            for i in 0..num_features {
+                let z_i = &self.kernel_feature_map.z_matrices[i];
+                let w_i = w.as_ref().subrows(i * num_bases, num_bases);
+                curr_raw_pred += z_i * w_i;
+            }
 
             // Transform predictions to probabilities: mu = sigmoid(a)
             let curr_prob = curr_raw_pred.map(|&v| Self::sigmoid(v));
@@ -92,22 +90,45 @@ impl Classifier {
             // Calculate the error (gradient component).
             let error = &y_centered - &curr_prob;
 
-            // Construct the weighted design matrix (Z_w = R * Z).
-            let mut zw = z_stacked.clone();
-            for i in 0..num_rows {
-                for j in 0..total_dim {
-                    zw[(i, j)] *= r_diag[i];
+            // Construct the Hessian (H = Z^T * R * Z + lambda * I) and RHS (Z^T * error)
+            let mut hessian = Mat::<f32>::zeros(total_dim, total_dim);
+            let mut rhs = Col::<f32>::zeros(total_dim);
+
+            for i in 0..num_features {
+                let z_i = &self.kernel_feature_map.z_matrices[i];
+                let offset_i = i * num_bases;
+
+                // RHS contribution: Z_i^T * error
+                for r in 0..num_rows {
+                    let err = error[r];
+                    for k in 0..num_bases {
+                        rhs[offset_i + k] += z_i[(r, k)] * err;
+                    }
+                }
+
+                for j in 0..num_features {
+                    let z_j = &self.kernel_feature_map.z_matrices[j];
+                    let offset_j = j * num_bases;
+
+                    // Hessian contribution: Z_i^T * R * Z_j
+                    for r in 0..num_rows {
+                        let r_val = r_diag[r];
+                        for k in 0..num_bases {
+                            let val_i = z_i[(r, k)] * r_val;
+                            for l in 0..num_bases {
+                                hessian[(offset_i + k, offset_j + l)] += val_i * z_j[(r, l)];
+                            }
+                        }
+                    }
                 }
             }
 
-            // Compute the Hessian matrix: H = Z^T * R * Z + lambda * I.
-            let mut hessian = z_stacked.transpose() * &zw;
+            // Add L2 regularization (Ridge)
             for i in 0..total_dim {
                 hessian[(i, i)] += self.penalty;
             }
 
             // Solve the normal equations (H * delta_w = gradient) using LDLT decomposition.
-            let rhs = z_stacked.transpose() * &error;
             let delta_w = hessian.ldlt(faer::Side::Lower).unwrap().solve(&rhs);
 
             // Convergence check based on the update magnitude.
