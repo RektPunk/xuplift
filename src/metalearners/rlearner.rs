@@ -55,23 +55,29 @@ impl RLearner {
         let mu_pred = mu.predict(x);
         let p_pred = p.predict(x);
 
-        let mut y_tilde = Col::<f32>::zeros(num_rows);
-        let mut t_tilde = Col::<f32>::zeros(num_rows);
         let mut r_target = Col::<f32>::zeros(num_rows);
+        let mut r_weights = Col::<f32>::zeros(num_rows);
 
         for i in 0..num_rows {
-            y_tilde[i] = y[i] - mu_pred[i];
-            t_tilde[i] = t[i] - p_pred[i].clamp(0.01, 0.99);
+            let y_tilde = y[i] - mu_pred[i];
+            let t_tilde = t[i] - p_pred[i].clamp(0.01, 0.99);
 
             // Objective: Minimize (y_tilde - t_tilde * tau)^2
-            r_target[i] = y_tilde[i] / t_tilde[i];
+            // Equivalent to Weighted Least Squares: Minimize sum( w_i * (target_i - tau)^2 )
+            // where target_i = y_tilde / t_tilde and w_i = t_tilde^2
+            r_weights[i] = t_tilde * t_tilde;
+            r_target[i] = if t_tilde.abs() > 1e-6 {
+                y_tilde / t_tilde
+            } else {
+                0.0
+            };
         }
 
-        // Train the final tau model on the R-objective target
+        // Train the final tau model on the R-objective target with weights
         let mut tau_map = KernelFeatureMap::new();
         tau_map.fit(x);
         let mut tau = Regressor::new(Arc::new(tau_map), tau_penalty);
-        tau.fit(&r_target);
+        tau.fit_weighted(&r_target, &r_weights);
 
         Self { tau }
     }

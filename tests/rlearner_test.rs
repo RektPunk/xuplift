@@ -55,7 +55,7 @@ fn test_rlearner() {
 
     // Verify if the average estimated uplift is close to 3.0
     assert!(
-        (avg_uplift - 5.0).abs() < 0.5,
+        (avg_uplift - 5.0).abs() < 0.1,
         "R-Learner estimation is too far from ground truth. Got: {:.4}",
         avg_uplift
     );
