@@ -54,9 +54,15 @@ impl Classifier {
                 y.nrows()
             );
         }
-        // Calculate the mean of target 'y' to center the data
-        self.base_value = y.iter().sum::<f32>() / num_rows as f32;
-        let y_centered = y - Col::<f32>::full(num_rows, self.base_value);
+        // Calculate the mean of target 'y' and initialize base_value in logit space
+        let mean_y = y.iter().sum::<f32>() / num_rows as f32;
+        let eps = 1e-6;
+        let p_clamped = mean_y.clamp(eps, 1.0 - eps);
+        self.base_value = (p_clamped / (1.0 - p_clamped)).ln();
+
+        // Initial probabilities based on the global intercept
+        let initial_prob = p_clamped;
+        let y_centered = y - Col::<f32>::full(num_rows, initial_prob);
         let total_dim = num_features * num_bases;
 
         // Aggregate all feature matrices from the kernel_feature_map into a single design matrix (Z)
