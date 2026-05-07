@@ -30,7 +30,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Build and Install Extension
-        run: uvx maturin develop
+        run: uvx maturin develop --release
 
       - name: Run tests
         run: uv run pytest python/tests/
