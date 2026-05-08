@@ -5,9 +5,6 @@
   <a href="https://github.com/RektPunk/xuplift/releases/latest">
       <img alt="release" src="https://img.shields.io/github/v/release/RektPunk/xuplift.svg">
   </a>
-  <a href="https://github.com/RektPunk/xuplift/blob/main/LICENSE">
-    <img alt="License" src="https://img.shields.io/github/license/RektPunk/xuplift.svg">
-  </a>
 </p>
 
 Explainable uplift modeling via linearized kernel feature maps, providing a collection of meta-learners.
