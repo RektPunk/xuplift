@@ -10,6 +10,8 @@ use crate::feature_map::KernelFeatureMap;
 pub struct Regressor {
     /// The kernel_feature_map responsible for kernel-based feature mapping.
     pub kernel_feature_map: Arc<KernelFeatureMap>,
+    /// The Ridge regularization penalty factor.
+    pub penalty: f32,
     /// The global mean of the target variable (used for centering).
     pub base_value: f32,
     /// Learned coefficients for each feature block.
@@ -18,9 +20,10 @@ pub struct Regressor {
 
 impl Regressor {
     /// Creates a new Regressor instance with a fitted KernelFeatureMap.
-    pub fn new(kernel_feature_map: Arc<KernelFeatureMap>) -> Self {
+    pub fn new(kernel_feature_map: Arc<KernelFeatureMap>, penalty: f32) -> Self {
         Self {
             kernel_feature_map,
+            penalty,
             base_value: 0.0,
             coefficients: Vec::new(),
         }
@@ -31,47 +34,87 @@ impl Regressor {
     /// This method solves the system: (Z^T * Z + lambda * I) * alpha = Z^T * y_centered
     pub fn fit(&mut self, y: &Col<f32>) {
         let num_rows = self.kernel_feature_map.num_rows;
+        let weights = Col::<f32>::full(num_rows, 1.0);
+        self.fit_weighted(y, &weights);
+    }
+
+    /// Fits the model using Weighted Global Ridge Regression.
+    ///
+    /// This method solves the system: (Z^T * W * Z + lambda * I) * alpha = Z^T * W * y_centered
+    /// where W is a diagonal weight matrix.
+    pub fn fit_weighted(&mut self, y: &Col<f32>, weights: &Col<f32>) {
+        let num_rows = self.kernel_feature_map.num_rows;
         let num_features = self.kernel_feature_map.num_features;
         let num_bases = self.kernel_feature_map.num_bases;
 
-        // Validate that the number of rows in the feature map matches the number of target values
-        if num_rows != y.nrows() {
+        if num_rows != y.nrows() || num_rows != weights.nrows() {
             panic!(
-                "Mismatched dimensions: The number of rows in the feature map ({}) must match the number of target values ({}).",
+                "Mismatched dimensions: The number of rows in the feature map ({}) must match the number of target values ({}) and weights ({}).",
                 num_rows,
-                y.nrows()
+                y.nrows(),
+                weights.nrows()
             );
         }
 
-        // Calculate the mean of target 'y' to center the data
-        self.base_value = y.iter().sum::<f32>() / num_rows as f32;
+        let total_weight: f32 = weights.iter().sum();
+        self.base_value = if total_weight > 1e-6 {
+            weights
+                .iter()
+                .zip(y.iter())
+                .map(|(&w, &yi)| w * yi)
+                .sum::<f32>()
+                / total_weight
+        } else {
+            y.iter().sum::<f32>() / num_rows as f32
+        };
+
         let y_centered = y - Col::<f32>::full(num_rows, self.base_value);
-
-        // Aggregate all feature matrices from the kernel_feature_map into a single design matrix (Z)
         let total_dim = num_features * num_bases;
-        let mut z_stacked = Mat::<f32>::zeros(num_rows, total_dim);
-        for (f_idx, z) in self.kernel_feature_map.z_matrices.iter().enumerate() {
-            let offset = f_idx * num_bases;
-            z_stacked
-                .as_mut()
-                .submatrix_mut(0, offset, num_rows, num_bases)
-                .copy_from(z);
-        }
-        // Construct and solve the Normal Equation: (Z^T * Z + lambda * I)
-        let lhs = z_stacked.transpose() * &z_stacked;
-        let mut ridge_lhs = lhs;
 
-        // Add L2 regularization (Ridge) to the diagonal for numerical stability
-        let lambda = 0.01;
-        for i in 0..total_dim {
-            ridge_lhs[(i, i)] += lambda; // Ridge regularization
+        // Initialize the Hessian (LHS) and Gradient (RHS) for the normal equations
+        let mut ridge_lhs = Mat::<f32>::zeros(total_dim, total_dim);
+        let mut rhs = Col::<f32>::zeros(total_dim);
+
+        // Block-based accumulation to save memory:
+        // We compute ridge_lhs = Z^T * W * Z and rhs = Z^T * W * y_centered
+        // by iterating over feature blocks Z_i and Z_j.
+        for i in 0..num_features {
+            let z_i = &self.kernel_feature_map.z_matrices[i];
+            let offset_i = i * num_bases;
+
+            // Compute RHS contribution: Z_i^T * W * y_centered
+            for r in 0..num_rows {
+                let w_y = weights[r] * y_centered[r];
+                for k in 0..num_bases {
+                    rhs[offset_i + k] += z_i[(r, k)] * w_y;
+                }
+            }
+
+            for j in 0..num_features {
+                let z_j = &self.kernel_feature_map.z_matrices[j];
+                let offset_j = j * num_bases;
+
+                // Accumulate Z_i^T * W * Z_j into the global Hessian matrix
+                for r in 0..num_rows {
+                    let w = weights[r];
+                    for k in 0..num_bases {
+                        let val_i = z_i[(r, k)] * w;
+                        for l in 0..num_bases {
+                            ridge_lhs[(offset_i + k, offset_j + l)] += val_i * z_j[(r, l)];
+                        }
+                    }
+                }
+            }
         }
-        let rhs = z_stacked.transpose() * &y_centered;
+
+        // Add L2 regularization (Ridge) to the diagonal
+        for i in 0..total_dim {
+            ridge_lhs[(i, i)] += self.penalty;
+        }
 
         // Solve the linear system using LDLT decomposition
         let alpha_total = ridge_lhs.ldlt(faer::Side::Lower).unwrap().solve(&rhs);
 
-        // Partition the global coefficient vector back into per-feature blocks
         self.coefficients = (0..num_features)
             .into_par_iter()
             .map(|f_idx| {
@@ -80,7 +123,6 @@ impl Regressor {
             })
             .collect();
     }
-
     /// Predicts target values for the given input matrix X.
     ///
     /// It maps X to the kernel space and calculates the weighted sum of contributions.

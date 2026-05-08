@@ -34,7 +34,7 @@ fn test_tlearner() {
 
     // 2. Model Training
     // Initialize TLearner which splits data into T=1 and T=0 and trains two regressors.
-    let tlearner = TLearner::new(&x, &t, &y);
+    let tlearner = TLearner::new(&x, &t, &y, 0.01);
 
     // 3. Uplift Estimation
     // Estimate Individual Treatment Effect (ITE) by subtracting

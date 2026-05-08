@@ -9,7 +9,6 @@ use rayon::prelude::*;
 /// operations approximate non-linear kernels (e.g., RBF kernel).
 #[derive(Default)]
 pub struct KernelFeatureMap {
-    // Learned Parameters
     /// Total number of rows in the training data.
     pub num_rows: usize,
     /// Number of input features (columns).
@@ -49,44 +48,70 @@ impl KernelFeatureMap {
         self.num_rows = x.nrows();
         self.num_features = x.ncols();
 
-        // Ensure every column has at least one valid (non-NaN) value
+        // Calculate raw feature means (skipping NaNs) to use for imputation during landmark selection
+        let raw_feature_means: Vec<f32> = (0..self.num_features)
+            .into_par_iter()
+            .map(|f_idx| {
+                let col = x.col(f_idx);
+                let mut sum = 0.0;
+                let mut count = 0;
+                for i in 0..self.num_rows {
+                    let val = col[i];
+                    if !val.is_nan() {
+                        sum += val;
+                        count += 1;
+                    }
+                }
+                if count > 0 { sum / count as f32 } else { 0.0 }
+            })
+            .collect();
+
+        // Identify rows that have no NaNs across all features
         let valid_row_indices: Vec<usize> = (0..self.num_rows)
             .into_par_iter()
             .filter(|&r_idx| (0..self.num_features).all(|f_idx| !x[(r_idx, f_idx)].is_nan()))
             .collect();
-
         let n_valid = valid_row_indices.len();
 
-        if n_valid == 0 {
-            panic!("Feature columns must not be empty or contain only NaNs.");
-        }
-
-        // Set the number of basis functions (clamped between 1 and 50)
-        self.num_bases = n_valid.min(50);
-        if n_valid < self.num_bases {
-            self.num_bases = n_valid;
-        }
-
-        // Randomly select indices for Nystrom landmarks
-        let mut rng = rng();
-        let mut landmark_indices = valid_row_indices.clone();
-        landmark_indices.shuffle(&mut rng);
-        let landmark_indices = &landmark_indices[..self.num_bases];
+        // Set the number of basis functions
+        // If we have enough "valid" rows (all features are not NaN) (>= 32), we use them as landmark candidates.
+        // Otherwise, we fallback to all rows and use imputation (feature means) for landmarks.
+        let landmark_indices = if n_valid >= 32 {
+            self.num_bases = n_valid.min(64);
+            let mut rng = rng();
+            let mut indices = valid_row_indices.clone();
+            indices.shuffle(&mut rng);
+            indices[..self.num_bases].to_vec()
+        } else {
+            self.num_bases = self.num_rows.min(64);
+            let mut all_indices: Vec<usize> = (0..self.num_rows).collect();
+            let mut rng = rng();
+            all_indices.shuffle(&mut rng);
+            all_indices[..self.num_bases].to_vec()
+        };
 
         let feature_params: Vec<_> = (0..self.num_features)
             .into_par_iter()
             .map(|f_idx| {
-                // Compute pairwise distances for s2_inv
-                // Median Heuristic for Kernel Bandwidth
+                let f_mean = raw_feature_means[f_idx];
+
+                // Compute pairwise distances for s2_inv (Median Heuristic)
+                // Use imputed values if a landmark is NaN
                 let mut dists = Vec::with_capacity(self.num_bases * self.num_bases / 2);
                 for i in 0..self.num_bases {
-                    let val_i = x[(landmark_indices[i], f_idx)];
+                    let mut val_i = x[(landmark_indices[i], f_idx)];
+                    if val_i.is_nan() {
+                        val_i = f_mean;
+                    }
                     for j in i + 1..self.num_bases {
-                        let val_j = x[(landmark_indices[j], f_idx)];
+                        let mut val_j = x[(landmark_indices[j], f_idx)];
+                        if val_j.is_nan() {
+                            val_j = f_mean;
+                        }
                         dists.push((val_i - val_j).abs());
                     }
                 }
-                dists.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                dists.sort_by(|a: &f32, b: &f32| a.partial_cmp(b).unwrap());
                 let median = if !dists.is_empty() {
                     let mid = dists.len() / 2;
                     if dists.len() % 2 == 0 {
@@ -101,13 +126,15 @@ impl KernelFeatureMap {
                 let s2_inv = 1.0 / (2.0 * (median.max(1e-6)).powi(2));
 
                 // Nystrom approximation
-                // Store landmark values (bases)
+                // Store landmark values (bases), using imputation if necessary
                 let mut bases = Mat::<f32>::zeros(1, self.num_bases);
                 for (j_idx, &row_idx) in landmark_indices.iter().enumerate() {
-                    bases[(0, j_idx)] = x[(row_idx, f_idx)];
+                    let val = x[(row_idx, f_idx)];
+                    bases[(0, j_idx)] = if val.is_nan() { f_mean } else { val };
                 }
 
                 // Compute Kernel matrix K_nm(X x Landmarks)
+                // If X_val is NaN, the kernel values for that row stay 0.0 (consistent with transform)
                 let mut k_nm = Mat::<f32>::zeros(self.num_rows, self.num_bases);
                 for i in 0..self.num_rows {
                     let x_val = x[(i, f_idx)];
