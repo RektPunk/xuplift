@@ -1,16 +1,16 @@
-use std::sync::Arc;
-
 use faer::{Col, Mat};
 
-use crate::feature_map::KernelFeatureMap;
 use crate::metalearners::data_utils;
 use crate::xmodels::regressor::Regressor;
 
 /// T-Learner (Two-Learner) for Uplift Modeling using Kernel-based Regressors.
 ///
-/// This learner builds two independent models: one for the treatment group (T=1)
-/// and one for the control group (T=0). The uplift is estimated as the difference
-/// between the predictions of these two models.
+/// This learner splits the data by treatment assignment and trains two independent
+/// models:
+/// $$\mu_1(x) = E[Y | X=x, T=1]$$
+/// $$\mu_0(x) = E[Y | X=x, T=0]$$
+/// The uplift is estimated as:
+/// $$\tau(x) = \mu_1(x) - \mu_0(x)$$
 pub struct TLearner {
     /// Regressor trained exclusively on the treatment group (T=1).
     pub mu_t1: Regressor,
@@ -41,17 +41,11 @@ impl TLearner {
         let y_t0 = data_utils::filter_elements(y, &indices_t0);
 
         // Train Model for T=1
-        let mut map_t1 = KernelFeatureMap::new();
-        map_t1.fit(&x_t1);
-        let map_t1_arc = Arc::new(map_t1);
-        let mut mu_t1 = Regressor::new(map_t1_arc, mu_penalty);
+        let mut mu_t1 = Regressor::new(mu_penalty);
         mu_t1.fit(&x_t1, &y_t1);
 
         // Train Model for T=0
-        let mut map_t0 = KernelFeatureMap::new();
-        map_t0.fit(&x_t0);
-        let map_t0_arc = Arc::new(map_t0);
-        let mut mu_t0 = Regressor::new(map_t0_arc, mu_penalty);
+        let mut mu_t0 = Regressor::new(mu_penalty);
         mu_t0.fit(&x_t0, &y_t0);
 
         Self { mu_t1, mu_t0 }

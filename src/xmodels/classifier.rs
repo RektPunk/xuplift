@@ -7,9 +7,18 @@ use rayon::prelude::*;
 use crate::feature_map::KernelFeatureMap;
 
 /// A Binary Classifier using Nystrom features and Iteratively Reweighted Least Squares (IRLS).
+///
+/// It solves the Logistic Regression problem in the transformed feature space $Z$:
+/// $$P(y=1|z) = \sigma(z^T w + b)$$
+/// where $\sigma(x) = \frac{1}{1 + e^{-x}}$ is the sigmoid function,
+/// $w$ are the coefficients, and $b$ is the intercept.
+///
+/// The model is fitted using the IRLS algorithm, which iteratively updates weights $w$:
+/// $w_{new} = w_{old} + (Z^T R Z + \lambda I)^{-1} Z^T (y - \mu)$
+/// where $R$ is a diagonal matrix with $R_{ii} = \mu_i (1 - \mu_i)$.
 pub struct Classifier {
     /// The kernel_feature_map responsible for kernel-based feature mapping.
-    pub kernel_feature_map: Arc<KernelFeatureMap>,
+    pub kernel_feature_map: Option<Arc<KernelFeatureMap>>,
     /// The Ridge regularization penalty factor.
     pub penalty: f32,
     /// The maximum number of iterations for the IRLS algorithm.
@@ -21,10 +30,10 @@ pub struct Classifier {
 }
 
 impl Classifier {
-    /// Creates a new Classifier instance with a fitted KernelFeatureMap.
-    pub fn new(kernel_feature_map: Arc<KernelFeatureMap>, penalty: f32, max_iter: usize) -> Self {
+    /// Creates a new Classifier instance.
+    pub fn new(penalty: f32, max_iter: usize) -> Self {
         Self {
-            kernel_feature_map,
+            kernel_feature_map: None,
             penalty,
             max_iter,
             base_value: 0.0,
@@ -42,11 +51,19 @@ impl Classifier {
     /// This implementation uses target centering (y - mean) to align with the Regressor's logic.
     /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column.
     pub fn fit(&mut self, x: &Mat<f32>, y: &Col<f32>) {
-        let num_rows = x.nrows();
-        let num_features = self.kernel_feature_map.num_features;
-        let num_bases = self.kernel_feature_map.num_bases;
+        // Initialize and fit the kernel map if it hasn't been set yet
+        if self.kernel_feature_map.is_none() {
+            let mut map = KernelFeatureMap::new();
+            map.fit(x);
+            self.kernel_feature_map = Some(Arc::new(map));
+        }
+        let map = self.kernel_feature_map.as_ref().unwrap();
 
-        // Validate that the number of rows in the feature map matches the number of target values
+        let num_rows = x.nrows();
+        let num_features = map.num_features;
+        let num_bases = map.num_bases;
+
+        // Validate that the number of rows matches the number of target values
         if num_rows != y.nrows() {
             panic!(
                 "Mismatched dimensions: The number of rows in X ({}) must match the number of target values ({}).",
@@ -71,7 +88,7 @@ impl Classifier {
             // Pass 1: Compute curr_raw_pred row-by-row
             let mut curr_raw_pred = Col::<f32>::zeros(num_rows);
             for r in 0..num_rows {
-                let z_r = self.kernel_feature_map.transform_row(x, r);
+                let z_r = map.transform_row(x, r);
                 curr_raw_pred[r] =
                     z_r.iter().zip(w.iter()).map(|(&a, &b)| a * b).sum::<f32>() + self.base_value;
             }
@@ -91,7 +108,7 @@ impl Classifier {
 
             // Pass 2: Accumulate Hessian and RHS row-by-row
             for r in 0..num_rows {
-                let z_r = self.kernel_feature_map.transform_row(x, r);
+                let z_r = map.transform_row(x, r);
                 let err = error[r];
                 let r_val = r_diag[r];
 
@@ -138,8 +155,9 @@ impl Classifier {
     ///
     /// Returns a vector of probabilities for the positive class (1).
     pub fn predict(&self, x: &Mat<f32>) -> Col<f32> {
+        let map = self.kernel_feature_map.as_ref().expect("Model must be fitted before prediction.");
         // Validate that the number of columns in the input matches the number of features in the feature map
-        let num_features = self.kernel_feature_map.num_features;
+        let num_features = map.num_features;
         let num_rows = x.nrows();
         if num_features != x.ncols() {
             panic!(
@@ -149,7 +167,7 @@ impl Classifier {
             );
         }
         // Map raw input to the feature space
-        let z_matrices = self.kernel_feature_map.transform(x);
+        let z_matrices = map.transform(x);
 
         // Parallel computation of y_pred = Sum(Z_i * coeff_i)
         let linear_pred = (0..num_features)
@@ -171,8 +189,9 @@ impl Classifier {
     /// For each feature $i$, it calculates the contribution $C_i = Z_i \cdot \alpha_i$,
     /// resulting in a matrix where each column represents the contribution of a specific feature.
     pub fn explain(&self, x: &Mat<f32>) -> Mat<f32> {
+        let map = self.kernel_feature_map.as_ref().expect("Model must be fitted before explanation.");
         // Validate that the number of columns in the input matches the number of features in the feature map
-        let num_features = self.kernel_feature_map.num_features;
+        let num_features = map.num_features;
         if num_features != x.ncols() {
             panic!(
                 "Mismatched dimensions: The number of columns in the feature map ({}) must match the number of input columns ({}).",
@@ -182,7 +201,7 @@ impl Classifier {
         }
 
         // Map raw input to the feature space
-        let z_matrices = self.kernel_feature_map.transform(x);
+        let z_matrices = map.transform(x);
 
         // Parallel computation of comtribution vec
         let contributions_vec: Vec<Col<f32>> = (0..x.ncols())

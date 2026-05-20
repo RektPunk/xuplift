@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use faer::{Col, Mat};
 
 pub use xuplift::feature_map::KernelFeatureMap;
@@ -31,16 +29,9 @@ fn test_regression() {
         y[i] = 2.0 * v1 - 1.5 * v2 + 0.5 * v3 + 5.0;
     }
 
-    // 2. Setup and Fit Kernel Feature Map
-    // The KernelFeatureMap utilizes Nystrom approximation to map input features
-    // into a latent space suitable for kernel-based regression.
-    let mut map = KernelFeatureMap::new();
-    map.fit(&x);
-    let map_arc = Arc::new(map);
-
     // 3. Setup and Fit Regressor
-    // Initialize the Regressor with the fitted map and solve for coefficients.
-    let mut model = Regressor::new(map_arc, penalty);
+    // Initialize the Regressor and solve for coefficients.
+    let mut model = Regressor::new(penalty);
     model.fit(&x, &y);
 
     // 4. Verify Prediction Accuracy (MAE)

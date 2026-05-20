@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use faer::{Col, Mat};
 use rand::RngExt;
 
@@ -38,15 +36,9 @@ fn test_gaussian_classification() {
         }
     }
 
-    // 2. Setup and Fit Kernel Feature Map
-    // Project input features into a high-dimensional space using the Nystrom approximation.
-    let mut map = KernelFeatureMap::new();
-    map.fit(&x);
-    let map_arc = Arc::new(map);
-
     // 3. Setup and Fit Classifier (IRLS)
     // Train a Logistic Regression model using Iteratively Reweighted Least Squares (IRLS).
-    let mut model = Classifier::new(map_arc, penalty, 20);
+    let mut model = Classifier::new(penalty, 20);
     model.fit(&x, &y); // Perform 20 iterations for convergence
 
     // 4. Verify Accuracy
