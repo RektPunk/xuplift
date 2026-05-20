@@ -1,10 +1,10 @@
 use faer::{Col, Mat};
 
 use crate::xmodels::regressor::Regressor;
+
 /// S-Learner (Single Learner) for Uplift Modeling using a Kernel-based Regressor.
 ///
-/// This learner treats the treatment assignment $T$ as an additional feature in a single
-/// response surface model:
+/// This learner treats the treatment assignment $T$ as an additional feature in a single response surface model:
 /// $$\mu(x, t) = E[Y | X=x, T=t]$$
 /// The uplift is estimated as:
 /// $$\tau(x) = \mu(x, 1) - \mu(x, 0)$$
@@ -73,8 +73,8 @@ impl SLearner {
     /// showing how the treatment changes the impact of each variable on the outcome.
     ///
     /// # Returns
-    /// A matrix of dimensions (n_samples x n_features + 1), where the last column
-    /// represents the direct effect of the treatment variable itself.
+    /// A matrix of dimensions (n_samples x (n_features + 1)),
+    /// where the last column represents the direct effect of the treatment variable itself.
     pub fn explain_uplift(&self, x: &Mat<f32>) -> Mat<f32> {
         let num_rows = x.nrows();
         let num_cols = x.ncols();

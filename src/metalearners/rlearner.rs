@@ -5,10 +5,9 @@ use crate::xmodels::regressor::Regressor;
 
 /// R-Learner for Uplift Modeling.
 ///
-/// Based on Robinson's transformation, this learner focuses on the residual-on-residual
-/// regression. It first trains an outcome model $m(x) = E[Y|X]$ and a propensity
-/// model $e(x) = E[T|X]$. The treatment effect $\tau(x)$ is then estimated by
-/// minimizing the R-objective:
+/// This learner focuses on the residual-on-residual regression.
+/// It first trains an outcome model $m(x) = E[Y|X]$ and a propensity model $e(x) = E[T|X]$.
+/// The treatment effect $\tau(x)$ is then estimated by minimizing the R-objective:
 /// $$\min_{\tau} \sum_{i=1}^n [ (y_i - m(x_i)) - (t_i - e(x_i)) \tau(x_i) ]^2$$
 pub struct RLearner {
     /// Treatment effect model

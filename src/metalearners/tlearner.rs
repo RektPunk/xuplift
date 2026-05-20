@@ -5,8 +5,7 @@ use crate::xmodels::regressor::Regressor;
 
 /// T-Learner (Two-Learner) for Uplift Modeling using Kernel-based Regressors.
 ///
-/// This learner splits the data by treatment assignment and trains two independent
-/// models:
+/// This learner splits the data by treatment assignment and trains two independent models:
 /// $$\mu_1(x) = E[Y | X=x, T=1]$$
 /// $$\mu_0(x) = E[Y | X=x, T=0]$$
 /// The uplift is estimated as:

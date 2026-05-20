@@ -73,11 +73,7 @@ impl KernelFeatureMap {
                         count += 1;
                     }
                 }
-                if count > 0 {
-                    sum / count as f32
-                } else {
-                    0.0
-                }
+                if count > 0 { sum / count as f32 } else { 0.0 }
             })
             .collect();
 
@@ -291,4 +287,3 @@ impl KernelFeatureMap {
             .collect()
     }
 }
-

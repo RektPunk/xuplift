@@ -133,7 +133,10 @@ impl Regressor {
     ///
     /// The prediction is: $\hat{y} = Z \alpha + b = \sum_{j} (Z_j \alpha_j) + b$.
     pub fn predict(&self, x: &Mat<f32>) -> Col<f32> {
-        let map = self.kernel_feature_map.as_ref().expect("Model must be fitted before prediction.");
+        let map = self
+            .kernel_feature_map
+            .as_ref()
+            .expect("Model must be fitted before prediction.");
         // Validate that the number of columns in the input matches the number of features in the feature map
         let num_features = map.num_features;
         let num_rows = x.nrows();
@@ -167,7 +170,10 @@ impl Regressor {
     /// For each feature $i$, it calculates the contribution $C_i = Z_i \cdot \alpha_i$,
     /// such that $\sum C_i + b = \hat{y}$.
     pub fn explain(&self, x: &Mat<f32>) -> Mat<f32> {
-        let map = self.kernel_feature_map.as_ref().expect("Model must be fitted before explanation.");
+        let map = self
+            .kernel_feature_map
+            .as_ref()
+            .expect("Model must be fitted before explanation.");
         // Validate that the number of columns in the input matches the number of features in the feature map
         let num_features = map.num_features;
         if num_features != x.ncols() {
