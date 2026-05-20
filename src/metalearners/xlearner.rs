@@ -57,14 +57,14 @@ impl XLearner {
         map_t1.fit(&x_t1);
         let map_t1_arc = Arc::new(map_t1);
         let mut mu_1 = Regressor::new(Arc::clone(&map_t1_arc), mu_penalty);
-        mu_1.fit(&y_t1);
+        mu_1.fit(&x_t1, &y_t1);
 
         // Train outcome model for T=0
         let mut map_t0 = KernelFeatureMap::new();
         map_t0.fit(&x_t0);
         let map_t0_arc = Arc::new(map_t0);
         let mut mu_0 = Regressor::new(Arc::clone(&map_t0_arc), mu_penalty);
-        mu_0.fit(&y_t0);
+        mu_0.fit(&x_t0, &y_t0);
 
         // Impute Treatment Effects and Train tau models
         // D_1 = Y_t1 - mu_0(X_t1): Actual treated outcome minus predicted control outcome (if they hadn't been treated)
@@ -75,16 +75,16 @@ impl XLearner {
 
         // Train tau models to estimate these imputed treatment effects (D_1, D_0)
         let mut tau_t1 = Regressor::new(map_t1_arc, tau_penalty);
-        tau_t1.fit(&d_1);
+        tau_t1.fit(&x_t1, &d_1);
         let mut tau_t0 = Regressor::new(map_t0_arc, tau_penalty);
-        tau_t0.fit(&d_0);
+        tau_t0.fit(&x_t0, &d_0);
 
         // Train Propensity Model (g): Predict T given X
         let mut propensity_map = KernelFeatureMap::new();
         propensity_map.fit(x);
         let propensity_map_arc = Arc::new(propensity_map);
         let mut p = Classifier::new(propensity_map_arc, p_penalty, p_max_iter);
-        p.fit(t);
+        p.fit(x, t);
 
         Self { tau_t1, tau_t0, p }
     }

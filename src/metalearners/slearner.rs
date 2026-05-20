@@ -45,7 +45,7 @@ impl SLearner {
 
         // Initialize and fit the Regressor using the generated kernel features
         let mut mu = Regressor::new(map_arc, mu_penalty);
-        mu.fit(y);
+        mu.fit(&x_combined, y);
 
         Self { mu }
     }

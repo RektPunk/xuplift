@@ -41,7 +41,7 @@ fn test_regression() {
     // 3. Setup and Fit Regressor
     // Initialize the Regressor with the fitted map and solve for coefficients.
     let mut model = Regressor::new(map_arc, penalty);
-    model.fit(&y);
+    model.fit(&x, &y);
 
     // 4. Verify Prediction Accuracy (MAE)
     // We expect the Mean Absolute Error (MAE) to be low, as the model

@@ -9,8 +9,6 @@ use rayon::prelude::*;
 /// operations approximate non-linear kernels (e.g., RBF kernel).
 #[derive(Default)]
 pub struct KernelFeatureMap {
-    /// Total number of rows in the training data.
-    pub num_rows: usize,
     /// Number of input features (columns).
     pub num_features: usize,
     /// Number of landmark points (basis functions) per feature.
@@ -22,8 +20,6 @@ pub struct KernelFeatureMap {
     pub proj_matrices: Vec<Mat<f32>>,
     /// Column-wise means of the transformed features for centering.
     pub feature_means: Vec<Col<f32>>,
-    /// Pre-computed transformed features for the training set.
-    pub z_matrices: Vec<Mat<f32>>,
     /// Inverse of the kernel bandwidth parameter (gamma) for each feature.
     pub s2_invs: Vec<f32>,
 }
@@ -32,20 +28,18 @@ impl KernelFeatureMap {
     /// Returns a new Transformer instance.
     pub fn new() -> Self {
         Self {
-            num_rows: 0,
             num_features: 0,
             num_bases: 0,
             feature_bases: Vec::new(),
             proj_matrices: Vec::new(),
             feature_means: Vec::new(),
-            z_matrices: Vec::new(),
             s2_invs: Vec::new(),
         }
     }
 
     /// Fits the transformer to the input data X.
     pub fn fit(&mut self, x: &Mat<f32>) {
-        self.num_rows = x.nrows();
+        let num_rows = x.nrows();
         self.num_features = x.ncols();
 
         // Calculate raw feature means (skipping NaNs) to use for imputation during landmark selection
@@ -55,27 +49,29 @@ impl KernelFeatureMap {
                 let col = x.col(f_idx);
                 let mut sum = 0.0;
                 let mut count = 0;
-                for i in 0..self.num_rows {
+                for i in 0..num_rows {
                     let val = col[i];
                     if !val.is_nan() {
                         sum += val;
                         count += 1;
                     }
                 }
-                if count > 0 { sum / count as f32 } else { 0.0 }
+                if count > 0 {
+                    sum / count as f32
+                } else {
+                    0.0
+                }
             })
             .collect();
 
         // Identify rows that have no NaNs across all features
-        let valid_row_indices: Vec<usize> = (0..self.num_rows)
+        let valid_row_indices: Vec<usize> = (0..num_rows)
             .into_par_iter()
             .filter(|&r_idx| (0..self.num_features).all(|f_idx| !x[(r_idx, f_idx)].is_nan()))
             .collect();
         let n_valid = valid_row_indices.len();
 
         // Set the number of basis functions
-        // If we have enough "valid" rows (all features are not NaN) (>= 32), we use them as landmark candidates.
-        // Otherwise, we fallback to all rows and use imputation (feature means) for landmarks.
         let landmark_indices = if n_valid >= 32 {
             self.num_bases = n_valid.min(64);
             let mut rng = rng();
@@ -83,8 +79,8 @@ impl KernelFeatureMap {
             indices.shuffle(&mut rng);
             indices[..self.num_bases].to_vec()
         } else {
-            self.num_bases = self.num_rows.min(64);
-            let mut all_indices: Vec<usize> = (0..self.num_rows).collect();
+            self.num_bases = num_rows.min(64);
+            let mut all_indices: Vec<usize> = (0..num_rows).collect();
             let mut rng = rng();
             all_indices.shuffle(&mut rng);
             all_indices[..self.num_bases].to_vec()
@@ -96,7 +92,6 @@ impl KernelFeatureMap {
                 let f_mean = raw_feature_means[f_idx];
 
                 // Compute pairwise distances for s2_inv (Median Heuristic)
-                // Use imputed values if a landmark is NaN
                 let mut dists = Vec::with_capacity(self.num_bases * self.num_bases / 2);
                 for i in 0..self.num_bases {
                     let mut val_i = x[(landmark_indices[i], f_idx)];
@@ -122,31 +117,16 @@ impl KernelFeatureMap {
                 } else {
                     1.0
                 };
-                // Precision parameter (1/2*sigma^2)
                 let s2_inv = 1.0 / (2.0 * (median.max(1e-6)).powi(2));
 
-                // Nystrom approximation
-                // Store landmark values (bases), using imputation if necessary
+                // Store landmark values (bases)
                 let mut bases = Mat::<f32>::zeros(1, self.num_bases);
                 for (j_idx, &row_idx) in landmark_indices.iter().enumerate() {
                     let val = x[(row_idx, f_idx)];
                     bases[(0, j_idx)] = if val.is_nan() { f_mean } else { val };
                 }
 
-                // Compute Kernel matrix K_nm(X x Landmarks)
-                // If X_val is NaN, the kernel values for that row stay 0.0 (consistent with transform)
-                let mut k_nm = Mat::<f32>::zeros(self.num_rows, self.num_bases);
-                for i in 0..self.num_rows {
-                    let x_val = x[(i, f_idx)];
-                    if !x_val.is_nan() {
-                        for j in 0..self.num_bases {
-                            let diff = x_val - bases[(0, j)];
-                            k_nm[(i, j)] = (-(diff * diff) * s2_inv).exp();
-                        }
-                    }
-                }
-
-                // Compute Landmark Kernel matrix K_mm(Landmarks x Landmarks)
+                // Compute Landmark Kernel matrix K_mm
                 let mut k_mm = Mat::<f32>::zeros(self.num_bases, self.num_bases);
                 for i in 0..self.num_bases {
                     for j in i..self.num_bases {
@@ -159,7 +139,7 @@ impl KernelFeatureMap {
                     }
                 }
 
-                // Eigen-decomposition to find the symmetric inverse square root: K_mm^(-1/2) = U \Lambda^{-1/2} U^T
+                // Eigen-decomposition
                 let eig = k_mm.self_adjoint_eigen(faer::Side::Lower).unwrap();
                 let mut inv_s = Mat::<f32>::zeros(self.num_bases, self.num_bases);
                 for d in 0..self.num_bases {
@@ -167,35 +147,80 @@ impl KernelFeatureMap {
                     inv_s[(d, d)] = if val > 1e-10 { 1.0 / val.sqrt() } else { 0.0 };
                 }
 
-                // Projection matrix maps raw kernel values to the orthonormal feature space
                 let proj_matrix = eig.U() * &inv_s;
-                let mut z_features = &k_nm * &proj_matrix;
 
-                // Centering the features (subtracting the mean; ignoring NaNs)
-                let mut z_col_means = Col::<f32>::zeros(self.num_bases);
-                for j in 0..self.num_bases {
-                    let mean_val = z_features.col(j).iter().sum::<f32>() / self.num_rows as f32;
-                    z_col_means[j] = mean_val;
-                    for i in 0..self.num_rows {
-                        if !x[(i, f_idx)].is_nan() {
-                            z_features[(i, j)] -= mean_val;
-                        } else {
-                            z_features[(i, j)] = 0.0;
+                // Compute feature means for centering without storing full Z matrix
+                // mean(Z) = mean(K_nm) * proj_matrix
+                let mut k_col_sums = Col::<f32>::zeros(self.num_bases);
+                for i in 0..num_rows {
+                    let x_val = x[(i, f_idx)];
+                    if !x_val.is_nan() {
+                        for j in 0..self.num_bases {
+                            let diff = x_val - bases[(0, j)];
+                            k_col_sums[j] += (-(diff * diff) * s2_inv).exp();
                         }
                     }
                 }
-                (bases, proj_matrix, z_features, z_col_means, s2_inv)
+                let mut z_col_means = Col::<f32>::zeros(self.num_bases);
+                for l in 0..self.num_bases {
+                    let mut sum = 0.0;
+                    for j in 0..self.num_bases {
+                        sum += k_col_sums[j] * proj_matrix[(j, l)];
+                    }
+                    z_col_means[l] = sum / num_rows as f32;
+                }
+
+                (bases, proj_matrix, z_col_means, s2_inv)
             })
             .collect();
 
-        // Transfer calculated parameters to the struct
-        for (b, p, z, o, s) in feature_params {
+        for (b, p, o, s) in feature_params {
             self.feature_bases.push(b);
             self.proj_matrices.push(p);
-            self.z_matrices.push(z);
             self.feature_means.push(o);
             self.s2_invs.push(s);
         }
+    }
+
+    /// Transforms a single feature for a given input value.
+    pub fn transform_feature_row(&self, f_idx: usize, x_val: f32) -> Col<f32> {
+        let mut z = Col::<f32>::zeros(self.num_bases);
+        if !x_val.is_nan() {
+            let bases = &self.feature_bases[f_idx];
+            let proj = &self.proj_matrices[f_idx];
+            let mean = &self.feature_means[f_idx];
+            let s2_inv = self.s2_invs[f_idx];
+
+            let mut k_row = Vec::with_capacity(self.num_bases);
+            for j in 0..self.num_bases {
+                let diff = x_val - bases[(0, j)];
+                k_row.push((-(diff * diff) * s2_inv).exp());
+            }
+
+            for l in 0..self.num_bases {
+                let mut sum = 0.0;
+                for j in 0..self.num_bases {
+                    sum += k_row[j] * proj[(j, l)];
+                }
+                z[l] = sum - mean[l];
+            }
+        }
+        z
+    }
+
+    /// Transforms an entire row into the kernel feature space.
+    pub fn transform_row(&self, x: &Mat<f32>, row_idx: usize) -> Col<f32> {
+        let total_dim = self.num_features * self.num_bases;
+        let mut z_row = Col::<f32>::zeros(total_dim);
+        for f_idx in 0..self.num_features {
+            let x_val = x[(row_idx, f_idx)];
+            let z_f = self.transform_feature_row(f_idx, x_val);
+            let offset = f_idx * self.num_bases;
+            for k in 0..self.num_bases {
+                z_row[offset + k] = z_f[k];
+            }
+        }
+        z_row
     }
 
     /// Transforms a new input matrix X into the learned Nystrom feature space.
@@ -205,7 +230,6 @@ impl KernelFeatureMap {
         (0..n_features)
             .into_par_iter()
             .map(|f_idx| {
-                // Apply the RBF kernel and projection learned during for given X (N x num_bases)
                 let mut k_batch = Mat::<f32>::zeros(n_samples, self.num_bases);
                 let bases = &self.feature_bases[f_idx];
                 let proj = &self.proj_matrices[f_idx];
@@ -222,7 +246,6 @@ impl KernelFeatureMap {
                 }
                 let mut z_batch = k_batch * proj;
 
-                // Center the new data using the means stored from training
                 for i in 0..n_samples {
                     if !x[(i, f_idx)].is_nan() {
                         for j in 0..self.num_bases {

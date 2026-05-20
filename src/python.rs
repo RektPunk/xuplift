@@ -59,9 +59,10 @@ impl PyClassifier {
         PyClassifier { inner: classifier }
     }
 
-    fn fit(&mut self, y: PyReadonlyArray1<f32>) {
+    fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
+        let x_mat = convert_to_faer_mat(x);
         let y_col = convert_to_faer_col(y);
-        self.inner.fit(&y_col);
+        self.inner.fit(&x_mat, &y_col);
     }
 
     fn predict<'py>(
@@ -103,9 +104,10 @@ impl PyRegressor {
         PyRegressor { inner: regressor }
     }
 
-    fn fit(&mut self, y: PyReadonlyArray1<f32>) {
+    fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
+        let x_mat = convert_to_faer_mat(x);
         let y_col = convert_to_faer_col(y);
-        self.inner.fit(&y_col);
+        self.inner.fit(&x_mat, &y_col);
     }
 
     fn predict<'py>(

@@ -45,14 +45,14 @@ impl TLearner {
         map_t1.fit(&x_t1);
         let map_t1_arc = Arc::new(map_t1);
         let mut mu_t1 = Regressor::new(map_t1_arc, mu_penalty);
-        mu_t1.fit(&y_t1);
+        mu_t1.fit(&x_t1, &y_t1);
 
         // Train Model for T=0
         let mut map_t0 = KernelFeatureMap::new();
         map_t0.fit(&x_t0);
         let map_t0_arc = Arc::new(map_t0);
         let mut mu_t0 = Regressor::new(map_t0_arc, mu_penalty);
-        mu_t0.fit(&y_t0);
+        mu_t0.fit(&x_t0, &y_t0);
 
         Self { mu_t1, mu_t0 }
     }

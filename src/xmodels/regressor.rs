@@ -32,24 +32,23 @@ impl Regressor {
     /// Fits the model using Global Ridge Regression.
     ///
     /// This method solves the system: (Z^T * Z + lambda * I) * alpha = Z^T * y_centered
-    pub fn fit(&mut self, y: &Col<f32>) {
-        let num_rows = self.kernel_feature_map.num_rows;
-        let weights = Col::<f32>::full(num_rows, 1.0);
-        self.fit_weighted(y, &weights);
+    pub fn fit(&mut self, x: &Mat<f32>, y: &Col<f32>) {
+        let weights = Col::<f32>::full(x.nrows(), 1.0);
+        self.fit_weighted(x, y, &weights);
     }
 
     /// Fits the model using Weighted Global Ridge Regression.
     ///
     /// This method solves the system: (Z^T * W * Z + lambda * I) * alpha = Z^T * W * y_centered
     /// where W is a diagonal weight matrix.
-    pub fn fit_weighted(&mut self, y: &Col<f32>, weights: &Col<f32>) {
-        let num_rows = self.kernel_feature_map.num_rows;
+    pub fn fit_weighted(&mut self, x: &Mat<f32>, y: &Col<f32>, weights: &Col<f32>) {
+        let num_rows = x.nrows();
         let num_features = self.kernel_feature_map.num_features;
         let num_bases = self.kernel_feature_map.num_bases;
 
         if num_rows != y.nrows() || num_rows != weights.nrows() {
             panic!(
-                "Mismatched dimensions: The number of rows in the feature map ({}) must match the number of target values ({}) and weights ({}).",
+                "Mismatched dimensions: The number of rows in X ({}) must match the number of target values ({}) and weights ({}).",
                 num_rows,
                 y.nrows(),
                 weights.nrows()
@@ -75,34 +74,23 @@ impl Regressor {
         let mut ridge_lhs = Mat::<f32>::zeros(total_dim, total_dim);
         let mut rhs = Col::<f32>::zeros(total_dim);
 
-        // Block-based accumulation to save memory:
+        // Row-based accumulation to save memory:
         // We compute ridge_lhs = Z^T * W * Z and rhs = Z^T * W * y_centered
-        // by iterating over feature blocks Z_i and Z_j.
-        for i in 0..num_features {
-            let z_i = &self.kernel_feature_map.z_matrices[i];
-            let offset_i = i * num_bases;
+        for r in 0..num_rows {
+            let z_r = self.kernel_feature_map.transform_row(x, r);
+            let w = weights[r];
+            let y_c = y_centered[r];
 
-            // Compute RHS contribution: Z_i^T * W * y_centered
-            for r in 0..num_rows {
-                let w_y = weights[r] * y_centered[r];
-                for k in 0..num_bases {
-                    rhs[offset_i + k] += z_i[(r, k)] * w_y;
-                }
+            // Accumulate RHS: Z_r^T * W * y_c
+            for i in 0..total_dim {
+                rhs[i] += z_r[i] * w * y_c;
             }
 
-            for j in 0..num_features {
-                let z_j = &self.kernel_feature_map.z_matrices[j];
-                let offset_j = j * num_bases;
-
-                // Accumulate Z_i^T * W * Z_j into the global Hessian matrix
-                for r in 0..num_rows {
-                    let w = weights[r];
-                    for k in 0..num_bases {
-                        let val_i = z_i[(r, k)] * w;
-                        for l in 0..num_bases {
-                            ridge_lhs[(offset_i + k, offset_j + l)] += val_i * z_j[(r, l)];
-                        }
-                    }
+            // Accumulate Hessian: Z_r^T * W * Z_r
+            for i in 0..total_dim {
+                let val_i = z_r[i] * w;
+                for j in 0..total_dim {
+                    ridge_lhs[(i, j)] += val_i * z_r[j];
                 }
             }
         }

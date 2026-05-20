@@ -41,15 +41,15 @@ impl Classifier {
     ///
     /// This implementation uses target centering (y - mean) to align with the Regressor's logic.
     /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column.
-    pub fn fit(&mut self, y: &Col<f32>) {
-        let num_rows = self.kernel_feature_map.num_rows;
+    pub fn fit(&mut self, x: &Mat<f32>, y: &Col<f32>) {
+        let num_rows = x.nrows();
         let num_features = self.kernel_feature_map.num_features;
         let num_bases = self.kernel_feature_map.num_bases;
 
         // Validate that the number of rows in the feature map matches the number of target values
         if num_rows != y.nrows() {
             panic!(
-                "Mismatched dimensions: The number of rows in the feature map ({}) must match the number of target values ({}).",
+                "Mismatched dimensions: The number of rows in X ({}) must match the number of target values ({}).",
                 num_rows,
                 y.nrows()
             );
@@ -60,11 +60,6 @@ impl Classifier {
         let p_clamped = mean_y.clamp(eps, 1.0 - eps);
         self.base_value = (p_clamped / (1.0 - p_clamped)).ln();
 
-        // Initial probabilities based on the global intercept
-        let initial_prob = p_clamped;
-        let y_centered = y - Col::<f32>::full(num_rows, initial_prob);
-
-        // De-stacking is no longer needed during fit since we use block-based accumulation
         let total_dim = num_features * num_bases;
 
         // Initialize weights
@@ -72,13 +67,13 @@ impl Classifier {
 
         // IRLS Iteration
         for _ in 0..self.max_iter {
-            // Current linear prediction: a = Z * w
-            // Compute this block by block: a = Sum(Z_i * w_i)
+            // Current linear prediction: a = Z * w + base_value
+            // Pass 1: Compute curr_raw_pred row-by-row
             let mut curr_raw_pred = Col::<f32>::zeros(num_rows);
-            for i in 0..num_features {
-                let z_i = &self.kernel_feature_map.z_matrices[i];
-                let w_i = w.as_ref().subrows(i * num_bases, num_bases);
-                curr_raw_pred += z_i * w_i;
+            for r in 0..num_rows {
+                let z_r = self.kernel_feature_map.transform_row(x, r);
+                curr_raw_pred[r] =
+                    z_r.iter().zip(w.iter()).map(|(&a, &b)| a * b).sum::<f32>() + self.base_value;
             }
 
             // Transform predictions to probabilities: mu = sigmoid(a)
@@ -87,38 +82,29 @@ impl Classifier {
             // Compute the diagonal weight matrix R: r_ii = mu * (1 - mu).
             let r_diag = curr_prob.map(|m| (m * (1.0 - m)).max(1e-5));
 
-            // Calculate the error (gradient component).
-            let error = &y_centered - &curr_prob;
+            // Calculate the error (gradient component): y - mu
+            let error = y - &curr_prob;
 
             // Construct the Hessian (H = Z^T * R * Z + lambda * I) and RHS (Z^T * error)
             let mut hessian = Mat::<f32>::zeros(total_dim, total_dim);
             let mut rhs = Col::<f32>::zeros(total_dim);
 
-            for i in 0..num_features {
-                let z_i = &self.kernel_feature_map.z_matrices[i];
-                let offset_i = i * num_bases;
+            // Pass 2: Accumulate Hessian and RHS row-by-row
+            for r in 0..num_rows {
+                let z_r = self.kernel_feature_map.transform_row(x, r);
+                let err = error[r];
+                let r_val = r_diag[r];
 
-                // RHS contribution: Z_i^T * error
-                for r in 0..num_rows {
-                    let err = error[r];
-                    for k in 0..num_bases {
-                        rhs[offset_i + k] += z_i[(r, k)] * err;
-                    }
+                // RHS contribution: Z_r^T * error
+                for k in 0..total_dim {
+                    rhs[k] += z_r[k] * err;
                 }
 
-                for j in 0..num_features {
-                    let z_j = &self.kernel_feature_map.z_matrices[j];
-                    let offset_j = j * num_bases;
-
-                    // Hessian contribution: Z_i^T * R * Z_j
-                    for r in 0..num_rows {
-                        let r_val = r_diag[r];
-                        for k in 0..num_bases {
-                            let val_i = z_i[(r, k)] * r_val;
-                            for l in 0..num_bases {
-                                hessian[(offset_i + k, offset_j + l)] += val_i * z_j[(r, l)];
-                            }
-                        }
+                // Hessian contribution: Z_r^T * R * Z_r
+                for k in 0..total_dim {
+                    let val_k = z_r[k] * r_val;
+                    for l in 0..total_dim {
+                        hessian[(k, l)] += val_k * z_r[l];
                     }
                 }
             }

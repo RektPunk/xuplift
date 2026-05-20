@@ -47,7 +47,7 @@ fn test_gaussian_classification() {
     // 3. Setup and Fit Classifier (IRLS)
     // Train a Logistic Regression model using Iteratively Reweighted Least Squares (IRLS).
     let mut model = Classifier::new(map_arc, penalty, 20);
-    model.fit(&y); // Perform 20 iterations for convergence
+    model.fit(&x, &y); // Perform 20 iterations for convergence
 
     // 4. Verify Accuracy
     // Ensure that the model can linearly separate the kernel-mapped Gaussian blobs.

@@ -42,14 +42,14 @@ impl RLearner {
         mu_map.fit(x);
         let mu_map_arc = Arc::new(mu_map);
         let mut mu = Regressor::new(Arc::clone(&mu_map_arc), mu_penalty);
-        mu.fit(y);
+        mu.fit(x, y);
 
         // Train p(x): Propensity model (E[T|X])
         let mut p_map = KernelFeatureMap::new();
         p_map.fit(x);
         let p_map_arc = Arc::new(p_map);
         let mut p = Classifier::new(p_map_arc, p_penalty, p_max_iter);
-        p.fit(t);
+        p.fit(x, t);
 
         // Compute Residuals
         let mu_pred = mu.predict(x);
@@ -77,7 +77,7 @@ impl RLearner {
         let mut tau_map = KernelFeatureMap::new();
         tau_map.fit(x);
         let mut tau = Regressor::new(Arc::new(tau_map), tau_penalty);
-        tau.fit_weighted(&r_target, &r_weights);
+        tau.fit_weighted(x, &r_target, &r_weights);
 
         Self { tau }
     }
