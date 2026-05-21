@@ -51,14 +51,11 @@ impl Classifier {
     /// This implementation uses target centering (y - mean) to align with the Regressor's logic.
     /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column.
     pub fn fit(&mut self, x: &Mat<f32>, y: &Col<f32>) {
-        // Initialize and fit the kernel map if it hasn't been set yet
-        if self.kernel_feature_map.is_none() {
-            let mut map = KernelFeatureMap::new();
-            map.fit(x);
-            self.kernel_feature_map = Some(Arc::new(map));
-        }
-        let map = self.kernel_feature_map.as_ref().unwrap();
+        // Initialize and fit the kernel map
+        let mut map = KernelFeatureMap::new();
+        map.fit(x);
 
+        // Allocate space for coefficients and compute initial values
         let num_rows = x.nrows();
         let num_features = map.num_features;
         let num_bases = map.num_bases;
@@ -71,6 +68,7 @@ impl Classifier {
                 y.nrows()
             );
         }
+
         // Calculate the mean of target 'y' and initialize base_value in logit space
         let mean_y = y.iter().sum::<f32>() / num_rows as f32;
         let eps = 1e-6;
@@ -149,6 +147,9 @@ impl Classifier {
                 w.as_ref().subrows(start, num_bases).to_owned()
             })
             .collect();
+
+        // Store the kernel map.
+        self.kernel_feature_map = Some(Arc::new(map));
     }
 
     /// Predicts class probabilities for the given input matrix X.

@@ -4,14 +4,14 @@ use xuplift::metalearners::rlearner::RLearner;
 
 #[test]
 fn test_rlearner() {
-    let n_samples = 1000;
+    let n_samples = 500;
     let n_features = 3;
 
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // 1. Synthetic Data Generation (Robinson's Transformation Scenario)
+    // Synthetic Data Generation
     // Baseline (m(x)): 1.5 * x0 + sin(x1)
     // Propensity (e(x)): 0.5 (Random assignment)
     // Ground Truth Uplift (tau): 3.0 (Constant for simplicity)
@@ -33,15 +33,15 @@ fn test_rlearner() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
-    // 2. Model Training
+    // Model Training
     // R-Learner trains: m(x) [Outcome], e(x) [Propensity], and tau(x) [Residual-on-Residual]
     let rlearner = RLearner::new(&x, &t, &y, 0.1, 0.1, 20, 0.1);
 
-    // 3. Uplift Estimation
+    // Uplift Estimation
     // In R-Learner, the tau model directly estimates the treatment effect.
     let uplift_estimate = rlearner.predict_uplift(&x);
 
-    // 4. Accuracy Verification
+    // Accuracy Verification
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -60,7 +60,7 @@ fn test_rlearner() {
         avg_uplift
     );
 
-    // 5. Mathematical Explanation Consistency Check
+    // Mathematical Explanation Consistency Check
     // For R-Learner, the explanation logic is simpler because it's a single Stage-2 model.
     // Predict(x) should be approximately (sum of feature contributions + base_value).
     let uplift_explanation = rlearner.explain_uplift(&x);

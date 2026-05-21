@@ -11,7 +11,7 @@ fn test_tlearner() {
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // 1. Synthetic Data Generation
+    // Synthetic Data Generation
     // Objective: Create a dataset with a known constant treatment effect.
     // Generative Model: y = 1.5*x0 + 0.5*x1 + (2.0 * t) + 10.0
     // Ground Truth Uplift (ITE): 2.0
@@ -32,17 +32,17 @@ fn test_tlearner() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (2.0 * treatment) + 10.0;
     }
 
-    // 2. Model Training
+    // Model Training
     // Initialize TLearner which splits data into T=1 and T=0 and trains two regressors.
     let tlearner = TLearner::new(&x, &t, &y, 0.01);
 
-    // 3. Uplift Estimation
+    // Uplift Estimation
     // Estimate Individual Treatment Effect (ITE) by subtracting
     // the control model's prediction from the treatment model's prediction.
     // τ(x) = μ_1(x) - μ_0(x)
     let uplift_estimate = tlearner.predict_uplift(&x);
 
-    // 4. Accuracy Verification
+    // Accuracy Verification
     // Verify if the average estimated uplift is close to the true effect (2.0).
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
@@ -61,7 +61,7 @@ fn test_tlearner() {
         avg_uplift
     );
 
-    // 5. Explanation Consistency Check
+    // Explanation Consistency Check
     // In T-Learner, the explanation is the difference between two models' contributions.
     // Mathematical Consistency: Σ(Contribution_T1 - Contribution_T0) == Predict_T1 - Predict_T0
     let uplift_explanation = tlearner.explain_uplift(&x);

@@ -11,7 +11,7 @@ fn test_xlearner() {
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // 1. Synthetic Data Generation with Imbalance
+    // Synthetic Data Generation with Imbalance
     // Objective: Simulate a scenario where Treatment (T=1) is rare.
     // Generative Model: y = 2.0*x0 + (5.0 * t) + 10.0
     // Ground Truth Uplift: 5.0
@@ -32,16 +32,16 @@ fn test_xlearner() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
-    // 2. Model Training
+    // Model Training
     // X-Learner internally trains 5 models:
     // Stage 1: mu_1, mu_0 | Stage 2: tau_1, tau_0 | Stage 3: p (propensity)
     let xlearner = XLearner::new(&x, &t, &y, 0.1, 0.1, 20, 0.1);
 
-    // 3. Uplift Estimation
+    // Uplift Estimation
     // The estimate uses the weighted average: g(x)*tau_0 + (1-g(x))*tau_1
     let uplift_estimate = xlearner.predict_uplift(&x);
 
-    // 4. Accuracy Verification
+    // Accuracy Verification
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -60,7 +60,7 @@ fn test_xlearner() {
         avg_uplift
     );
 
-    // 5. Mathematical Explanation Consistency Check
+    // Mathematical Explanation Consistency Check
     // In X-Learner, the explanation must account for the dynamic base value
     // caused by the propensity-weighted blending of two models.
     let uplift_explanation = xlearner.explain_uplift(&x);

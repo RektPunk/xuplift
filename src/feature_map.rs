@@ -48,13 +48,6 @@ impl KernelFeatureMap {
     }
 
     /// Fits the transformer to the input data X.
-    ///
-    /// This involves:
-    /// 1. Imputing NaNs with feature means for landmark selection.
-    /// 2. Selecting $m$ landmark points.
-    /// 3. Calculating the kernel bandwidth $\sigma$ using the Median Heuristic.
-    /// 4. Computing the projection matrix $P$ via eigen-decomposition of $K_{mm}$.
-    /// 5. Computing feature means $\mu$ for centering.
     pub fn fit(&mut self, x: &Mat<f32>) {
         let num_rows = x.nrows();
         self.num_features = x.ncols();

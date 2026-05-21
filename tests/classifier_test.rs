@@ -36,12 +36,12 @@ fn test_gaussian_classification() {
         }
     }
 
-    // 3. Setup and Fit Classifier (IRLS)
+    // Setup and Fit Classifier (IRLS)
     // Train a Logistic Regression model using Iteratively Reweighted Least Squares (IRLS).
     let mut model = Classifier::new(penalty, 20);
     model.fit(&x, &y); // Perform 20 iterations for convergence
 
-    // 4. Verify Accuracy
+    // Verify Accuracy
     // Ensure that the model can linearly separate the kernel-mapped Gaussian blobs.
     let probs = model.predict(&x);
     let mut correct = 0;
@@ -58,7 +58,7 @@ fn test_gaussian_classification() {
         accuracy * 100.0
     );
 
-    // 5. Verify Explanation Consistency
+    // Verify Explanation Consistency
     // In Logistic Regression, the explanation provides feature contributions in the logit space.
     // We verify that: Sigmoid(Sum(Contributions) + Base_Value) == Predicted_Probability
     let explanation = model.explain(&x);

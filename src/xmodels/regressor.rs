@@ -50,17 +50,15 @@ impl Regressor {
     /// The system is solved efficiently using LDLT decomposition of the Hessian.
     pub fn fit_weighted(&mut self, x: &Mat<f32>, y: &Col<f32>, weights: &Col<f32>) {
         // Initialize and fit the kernel map if it hasn't been set yet
-        if self.kernel_feature_map.is_none() {
-            let mut map = KernelFeatureMap::new();
-            map.fit(x);
-            self.kernel_feature_map = Some(Arc::new(map));
-        }
-        let map = self.kernel_feature_map.as_ref().unwrap();
+        let mut map = KernelFeatureMap::new();
+        map.fit(x);
 
+        // Allocate space for coefficients and compute initial values
         let num_rows = x.nrows();
         let num_features = map.num_features;
         let num_bases = map.num_bases;
 
+        // Validate that the number of rows matches the number of target values
         if num_rows != y.nrows() || num_rows != weights.nrows() {
             panic!(
                 "Mismatched dimensions: The number of rows in X ({}) must match the number of target values ({}) and weights ({}).",
@@ -128,6 +126,9 @@ impl Regressor {
                 alpha_total.as_ref().subrows(start, num_bases).to_owned()
             })
             .collect();
+
+        // Store the kernel map.
+        self.kernel_feature_map = Some(Arc::new(map));
     }
     /// Predicts target values for the given input matrix X.
     ///

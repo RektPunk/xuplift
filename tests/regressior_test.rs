@@ -13,7 +13,7 @@ fn test_regression() {
     let mut y = Col::<f32>::zeros(n_samples);
     let penalty = 0.01;
 
-    // 1. Generate Synthetic Multi-variable Data
+    // Generate Synthetic Multi-variable Data
     // Rule: y = 2.0*x0 - 1.5*x1 + 0.5*x2 + 5.0 (base_value)
     // This generates a predictable non-linear relationship (via cos and power functions)
     // to test the kernel model's ability to approximate the response surface.
@@ -29,12 +29,12 @@ fn test_regression() {
         y[i] = 2.0 * v1 - 1.5 * v2 + 0.5 * v3 + 5.0;
     }
 
-    // 3. Setup and Fit Regressor
+    // Setup and Fit Regressor
     // Initialize the Regressor and solve for coefficients.
     let mut model = Regressor::new(penalty);
     model.fit(&x, &y);
 
-    // 4. Verify Prediction Accuracy (MAE)
+    // Verify Prediction Accuracy (MAE)
     // We expect the Mean Absolute Error (MAE) to be low, as the model
     // should accurately recover the underlying generating function.
     let preds = model.predict(&x);
@@ -46,7 +46,7 @@ fn test_regression() {
     println!("Multi-variable Regression MAE: {:.4}", mae);
     assert!(mae < 0.5, "Regression MAE is too high: {:.4}", mae);
 
-    // 5. Verify Explanation Consistency
+    // Verify Explanation Consistency
     // Mathematical Consistency Check:
     // The sum of individual feature contributions plus the model's base value (intercept)
     // must exactly equal the final predicted value for every sample.
