@@ -13,8 +13,8 @@ fn test_tlearner() {
 
     // Synthetic Data Generation
     // Objective: Create a dataset with a known constant treatment effect.
-    // Generative Model: y = 1.5*x0 + 0.5*x1 + (2.0 * t) + 10.0
-    // Ground Truth Uplift (ITE): 2.0
+    // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
+    // Ground Truth Uplift (ITE): 5.0
     for i in 0..n_samples {
         let x0 = i as f32 * 0.01;
         let x1 = (i as f32).sin();
@@ -28,22 +28,17 @@ fn test_tlearner() {
         let treatment = if i % 2 == 0 { 1.0 } else { 0.0 };
         t[i] = treatment;
 
-        // Outcome depends on X and a clear Treatment effect (2.0)
-        y[i] = 1.5 * x0 + 0.5 * x1.sin() + (2.0 * treatment) + 10.0;
+        // Outcome depends on X and a clear Treatment effect (5.0)
+        y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
-    // Model Training
     // Initialize TLearner which splits data into T=1 and T=0 and trains two regressors.
     let tlearner = TLearner::new(&x, &t, &y, 0.01);
 
-    // Uplift Estimation
-    // Estimate Individual Treatment Effect (ITE) by subtracting
-    // the control model's prediction from the treatment model's prediction.
-    // τ(x) = μ_1(x) - μ_0(x)
+    // Estimate Individual Treatment Effect (ITE)
     let uplift_estimate = tlearner.predict_uplift(&x);
 
-    // Accuracy Verification
-    // Verify if the average estimated uplift is close to the true effect (2.0).
+    // Verify if the average estimated uplift is close to the true effect.
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -51,17 +46,17 @@ fn test_tlearner() {
     let avg_uplift = sum_uplift / n_samples as f32;
 
     println!(
-        "True Uplift: 2.0, Estimated Average Uplift: {:.4}",
+        "True Uplift: 5.0, Estimated Average Uplift: {:.4}",
         avg_uplift
     );
 
     assert!(
-        (avg_uplift - 2.0).abs() < 0.1,
+        (avg_uplift - 5.0).abs() < 0.1,
         "Uplift estimation is too far from ground truth. Got: {:.4}",
         avg_uplift
     );
 
-    // Explanation Consistency Check
+    // Verify Mathematical Explanation Consistency
     // In T-Learner, the explanation is the difference between two models' contributions.
     // Mathematical Consistency: Σ(Contribution_T1 - Contribution_T0) == Predict_T1 - Predict_T0
     let uplift_explanation = tlearner.explain_uplift(&x);

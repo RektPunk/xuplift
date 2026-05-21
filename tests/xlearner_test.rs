@@ -13,8 +13,8 @@ fn test_xlearner() {
 
     // Synthetic Data Generation with Imbalance
     // Objective: Simulate a scenario where Treatment (T=1) is rare.
-    // Generative Model: y = 2.0*x0 + (5.0 * t) + 10.0
-    // Ground Truth Uplift: 5.0
+    // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
+    // Ground Truth Uplift (ITE): 5.0
     for i in 0..n_samples {
         let x0 = i as f32 * 0.02;
         let x1 = (i as f32 * 0.1).cos();
@@ -25,6 +25,7 @@ fn test_xlearner() {
         x[(i, 2)] = x2;
 
         // Intentional Imbalance: Only 20% receive treatment
+        // X-Learner should handle the 20/80 imbalance well
         let treatment = if i % 5 == 0 { 1.0 } else { 0.0 };
         t[i] = treatment;
 
@@ -32,16 +33,14 @@ fn test_xlearner() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
-    // Model Training
     // X-Learner internally trains 5 models:
     // Stage 1: mu_1, mu_0 | Stage 2: tau_1, tau_0 | Stage 3: p (propensity)
     let xlearner = XLearner::new(&x, &t, &y, 0.1, 0.1, 20, 0.1);
 
-    // Uplift Estimation
-    // The estimate uses the weighted average: g(x)*tau_0 + (1-g(x))*tau_1
+    // Estimate Individual Treatment Effect (ITE): g(x)*tau_0 + (1-g(x))*tau_1
     let uplift_estimate = xlearner.predict_uplift(&x);
 
-    // Accuracy Verification
+    // Verify if the average estimated uplift is close to the true effect.
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -53,14 +52,13 @@ fn test_xlearner() {
         avg_uplift
     );
 
-    // X-Learner should handle the 20/80 imbalance well
     assert!(
-        (avg_uplift - 5.0).abs() < 0.2,
+        (avg_uplift - 5.0).abs() < 0.1,
         "Uplift estimation error too high. Got: {:.4}",
         avg_uplift
     );
 
-    // Mathematical Explanation Consistency Check
+    // Verify Mathematical Explanation Consistency
     // In X-Learner, the explanation must account for the dynamic base value
     // caused by the propensity-weighted blending of two models.
     let uplift_explanation = xlearner.explain_uplift(&x);

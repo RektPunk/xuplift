@@ -37,12 +37,10 @@ fn test_gaussian_classification() {
     }
 
     // Setup and Fit Classifier (IRLS)
-    // Train a Logistic Regression model using Iteratively Reweighted Least Squares (IRLS).
-    let mut model = Classifier::new(penalty, 20);
-    model.fit(&x, &y); // Perform 20 iterations for convergence
+    let mut model = Classifier::new(penalty, 20); // Perform 20 iterations for convergence
+    model.fit(&x, &y);
 
     // Verify Accuracy
-    // Ensure that the model can linearly separate the kernel-mapped Gaussian blobs.
     let probs = model.predict(&x);
     let mut correct = 0;
     for i in 0..n_samples {
@@ -58,9 +56,8 @@ fn test_gaussian_classification() {
         accuracy * 100.0
     );
 
-    // Verify Explanation Consistency
-    // In Logistic Regression, the explanation provides feature contributions in the logit space.
-    // We verify that: Sigmoid(Sum(Contributions) + Base_Value) == Predicted_Probability
+    // Verify Explanation Consistency:
+    // Sigmoid(Sum(Contributions) + Base_Value) == Predicted_Probability
     let explanation = model.explain(&x);
 
     for i in 0..n_samples {
@@ -86,4 +83,35 @@ fn test_gaussian_classification() {
         );
     }
     println!("Classification explanation check passed for Gaussian Blobs.");
+}
+
+#[test]
+fn test_classifier_with_nans() {
+    let n_samples = 100;
+    let n_features = 2;
+    let mut x = Mat::<f32>::zeros(n_samples, n_features);
+    let mut y = Col::<f32>::zeros(n_samples);
+
+    for i in 0..n_samples {
+        x[(i, 0)] = i as f32;
+        x[(i, 1)] = if i % 10 == 0 {
+            f32::NAN
+        } else {
+            (i as f32).sin()
+        };
+        y[i] = if i < n_samples / 2 { 0.0 } else { 1.0 };
+    }
+
+    let mut model = Classifier::new(0.01, 5);
+    model.fit(&x, &y);
+
+    // Check if predictions for NaN rows are still returning values
+    let probs = model.predict(&x);
+    for i in 0..n_samples {
+        assert!(
+            !probs[i].is_nan(),
+            "Probability should not be NaN for sample {}",
+            i
+        );
+    }
 }

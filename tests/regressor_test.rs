@@ -7,16 +7,13 @@ pub use xuplift::xmodels::regressor::Regressor;
 #[test]
 fn test_regression() {
     let n_samples = 500;
-    let n_features = 3; // Using 3 features for multi-variable test
-
+    let n_features = 3;
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
     let mut y = Col::<f32>::zeros(n_samples);
     let penalty = 0.01;
 
     // Generate Synthetic Multi-variable Data
-    // Rule: y = 2.0*x0 - 1.5*x1 + 0.5*x2 + 5.0 (base_value)
-    // This generates a predictable non-linear relationship (via cos and power functions)
-    // to test the kernel model's ability to approximate the response surface.
+    // Generative Model: y = 2.0*x0 - 1.5*x1 + 0.5*x2 + 5.0 (base_value)
     for i in 0..n_samples {
         let v1 = i as f32 * 0.1;
         let v2 = (i as f32 * 0.5).cos();
@@ -35,8 +32,7 @@ fn test_regression() {
     model.fit(&x, &y);
 
     // Verify Prediction Accuracy (MAE)
-    // We expect the Mean Absolute Error (MAE) to be low, as the model
-    // should accurately recover the underlying generating function.
+    // Expect the Mean Absolute Error (MAE) to be low.
     let preds = model.predict(&x);
     let mut total_error = 0.0;
     for i in 0..n_samples {
@@ -44,10 +40,9 @@ fn test_regression() {
     }
     let mae = total_error / n_samples as f32;
     println!("Multi-variable Regression MAE: {:.4}", mae);
-    assert!(mae < 0.5, "Regression MAE is too high: {:.4}", mae);
+    assert!(mae < 0.1, "Regression MAE is too high: {:.4}", mae);
 
     // Verify Explanation Consistency
-    // Mathematical Consistency Check:
     // The sum of individual feature contributions plus the model's base value (intercept)
     // must exactly equal the final predicted value for every sample.
     let explanation = model.explain(&x);
@@ -79,4 +74,35 @@ fn test_regression() {
         "Explanation consistency check passed for {} features.",
         n_features
     );
+}
+
+#[test]
+fn test_regression_with_nans() {
+    let n_samples = 100;
+    let n_features = 2;
+    let mut x = Mat::<f32>::zeros(n_samples, n_features);
+    let mut y = Col::<f32>::zeros(n_samples);
+
+    for i in 0..n_samples {
+        x[(i, 0)] = i as f32;
+        x[(i, 1)] = if i % 10 == 0 {
+            f32::NAN
+        } else {
+            (i as f32).sin()
+        };
+        y[i] = x[(i, 0)] + if x[(i, 1)].is_nan() { 0.0 } else { x[(i, 1)] };
+    }
+
+    let mut model = Regressor::new(0.01);
+    model.fit(&x, &y);
+
+    // Check if predictions for NaN rows are still returning values
+    let preds = model.predict(&x);
+    for i in 0..n_samples {
+        assert!(
+            !preds[i].is_nan(),
+            "Prediction should not be NaN for sample {}",
+            i
+        );
+    }
 }
