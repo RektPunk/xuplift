@@ -1,4 +1,5 @@
 use faer::{Col, Mat};
+use rayon::prelude::*;
 
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
@@ -36,39 +37,46 @@ impl RLearner {
     ) -> Self {
         let num_rows = x.nrows();
 
-        // Train mu(x): Outcome model (E[Y|X])
-        let mut mu = Regressor::new(mu_penalty);
-        mu.fit(x, y);
-
-        // Train p(x): Propensity model (E[T|X])
-        let mut p = Classifier::new(p_penalty, p_max_iter);
-        p.fit(x, t);
+        // Train and predict outcome model mu(x) and propensity model p(x)
+        let (mu_pred, p_pred) = rayon::join(
+            || {
+                let mut mu = Regressor::new(mu_penalty);
+                mu.fit(x, y);
+                mu.predict(x)
+            },
+            || {
+                let mut p = Classifier::new(p_penalty, p_max_iter);
+                p.fit(x, t);
+                p.predict(x)
+            },
+        );
 
         // Compute Residuals
-        let mu_pred = mu.predict(x);
-        let p_pred = p.predict(x);
+        let (r_target, r_weights): (Vec<f32>, Vec<f32>) = (0..num_rows)
+            .into_par_iter()
+            .map(|i| {
+                let y_tilde = y[i] - mu_pred[i];
+                let t_tilde = t[i] - p_pred[i].clamp(0.01, 0.99);
 
-        let mut r_target = Col::<f32>::zeros(num_rows);
-        let mut r_weights = Col::<f32>::zeros(num_rows);
+                // Objective: Minimize (y_tilde - t_tilde * tau)^2
+                // Equivalent to Weighted Least Squares: Minimize sum( w_i * (target_i - tau)^2 )
+                // where target_i = y_tilde / t_tilde and w_i = t_tilde^2
+                let weight = t_tilde * t_tilde;
+                let target = if t_tilde.abs() > 1e-6 {
+                    y_tilde / t_tilde
+                } else {
+                    0.0
+                };
+                (target, weight)
+            })
+            .unzip();
 
-        for i in 0..num_rows {
-            let y_tilde = y[i] - mu_pred[i];
-            let t_tilde = t[i] - p_pred[i].clamp(0.01, 0.99);
-
-            // Objective: Minimize (y_tilde - t_tilde * tau)^2
-            // Equivalent to Weighted Least Squares: Minimize sum( w_i * (target_i - tau)^2 )
-            // where target_i = y_tilde / t_tilde and w_i = t_tilde^2
-            r_weights[i] = t_tilde * t_tilde;
-            r_target[i] = if t_tilde.abs() > 1e-6 {
-                y_tilde / t_tilde
-            } else {
-                0.0
-            };
-        }
+        let r_target_col = Col::<f32>::from_fn(num_rows, |i| r_target[i]);
+        let r_weights_col = Col::<f32>::from_fn(num_rows, |i| r_weights[i]);
 
         // Train the final tau model on the R-objective target with weights
         let mut tau = Regressor::new(tau_penalty);
-        tau.fit_weighted(x, &r_target, &r_weights);
+        tau.fit_weighted(x, &r_target_col, &r_weights_col);
 
         Self { tau }
     }

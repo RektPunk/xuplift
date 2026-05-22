@@ -39,7 +39,7 @@ impl TLearner {
         let x_t0 = data_utils::filter_rows(x, &indices_t0);
         let y_t0 = data_utils::filter_elements(y, &indices_t0);
 
-        // Train Models in parallel
+        // Train Models outcome models
         let (mu_t1, mu_t0) = rayon::join(
             || {
                 let mut mu_t1 = Regressor::new(mu_penalty);

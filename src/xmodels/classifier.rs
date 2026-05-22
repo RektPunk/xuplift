@@ -80,49 +80,61 @@ impl Classifier {
         // Initialize weights
         let mut w = Col::<f32>::zeros(total_dim);
 
-        // IRLS Iteration
+        // IRLS Iteration: Streaming approach to save memory
         for _ in 0..self.max_iter {
-            // Current linear prediction: a = Z * w + base_value
-            // Pass 1: Compute curr_raw_pred row-by-row
-            let mut curr_raw_pred = Col::<f32>::zeros(num_rows);
-            for r in 0..num_rows {
-                let z_r = map.transform_row(x, r);
-                curr_raw_pred[r] =
-                    z_r.iter().zip(w.iter()).map(|(&a, &b)| a * b).sum::<f32>() + self.base_value;
-            }
+            let base_val = self.base_value;
+            let (mut hessian, rhs, _) = (0..num_rows)
+                .into_par_iter()
+                .fold(
+                    || {
+                        (
+                            Mat::<f32>::zeros(total_dim, total_dim),
+                            Col::<f32>::zeros(total_dim),
+                            0.0,
+                        )
+                    },
+                    |(mut acc_h, mut acc_g, acc_mag), r| {
+                        let z_r = map.transform_row(x, r);
 
-            // Transform predictions to probabilities: mu = sigmoid(a)
-            let curr_prob = curr_raw_pred.map(|&v| Self::sigmoid(v));
+                        // Linear prediction: raw_pred = z^T * w + base_value
+                        let mut raw_pred = base_val;
+                        for i in 0..total_dim {
+                            raw_pred += z_r[i] * w[i];
+                        }
 
-            // Compute the diagonal weight matrix R: r_ii = mu * (1 - mu).
-            let r_diag = curr_prob.map(|m| (m * (1.0 - m)).max(1e-5));
+                        let prob = Self::sigmoid(raw_pred);
+                        let r_val = (prob * (1.0 - prob)).max(1e-5);
+                        let err = y[r] - prob;
 
-            // Calculate the error (gradient component): y - mu
-            let error = y - &curr_prob;
-
-            // Construct the Hessian (H = Z^T * R * Z + lambda * I) and RHS (Z^T * error)
-            let mut hessian = Mat::<f32>::zeros(total_dim, total_dim);
-            let mut rhs = Col::<f32>::zeros(total_dim);
-
-            // Pass 2: Accumulate Hessian and RHS row-by-row
-            for r in 0..num_rows {
-                let z_r = map.transform_row(x, r);
-                let err = error[r];
-                let r_val = r_diag[r];
-
-                // RHS contribution: Z_r^T * error
-                for k in 0..total_dim {
-                    rhs[k] += z_r[k] * err;
-                }
-
-                // Hessian contribution: Z_r^T * R * Z_r
-                for k in 0..total_dim {
-                    let val_k = z_r[k] * r_val;
-                    for l in 0..total_dim {
-                        hessian[(k, l)] += val_k * z_r[l];
-                    }
-                }
-            }
+                        for k in 0..total_dim {
+                            let z_k = z_r[k];
+                            acc_g[k] += z_k * err;
+                            let val_k = z_k * r_val;
+                            for l in 0..total_dim {
+                                acc_h[(k, l)] += val_k * z_r[l];
+                            }
+                        }
+                        (acc_h, acc_g, acc_mag)
+                    },
+                )
+                .reduce(
+                    || {
+                        (
+                            Mat::<f32>::zeros(total_dim, total_dim),
+                            Col::<f32>::zeros(total_dim),
+                            0.0,
+                        )
+                    },
+                    |(mut h1, mut g1, m1), (h2, g2, m2)| {
+                        for j in 0..total_dim {
+                            g1[j] += g2[j];
+                            for i in 0..total_dim {
+                                h1[(i, j)] += h2[(i, j)];
+                            }
+                        }
+                        (h1, g1, m1 + m2)
+                    },
+                );
 
             // Add L2 regularization (Ridge)
             for i in 0..total_dim {
@@ -170,22 +182,34 @@ impl Classifier {
                 x.ncols()
             );
         }
-        // Map raw input to the feature space
-        let z_matrices = map.transform(x);
 
-        // Parallel computation of y_pred = Sum(Z_i * coeff_i)
-        let linear_pred = (0..num_features)
-            .into_par_iter()
-            .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
-            .reduce(
-                || Col::<f32>::zeros(num_rows),
-                |mut acc, res| {
-                    acc += res;
-                    acc
-                },
-            );
-        // Apply sigmoid activation, incorporating the base_value as the global intercept.
-        linear_pred.map(|v| Self::sigmoid(v + self.base_value))
+        // Process in chunks to save memory
+        let chunk_size = 10000.min(num_rows);
+        let mut prediction = Col::<f32>::zeros(num_rows);
+
+        for start_row in (0..num_rows).step_by(chunk_size) {
+            let end_row = (start_row + chunk_size).min(num_rows);
+            let n_chunk = end_row - start_row;
+            let x_chunk = x.as_ref().subrows(start_row, n_chunk);
+
+            let z_matrices = map.transform(&x_chunk.to_owned());
+
+            let chunk_pred = (0..num_features)
+                .into_par_iter()
+                .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
+                .reduce(
+                    || Col::<f32>::zeros(n_chunk),
+                    |mut acc, res| {
+                        acc += res;
+                        acc
+                    },
+                );
+
+            for i in 0..n_chunk {
+                prediction[start_row + i] = Self::sigmoid(chunk_pred[i] + self.base_value);
+            }
+        }
+        prediction
     }
 
     /// Explains the model's prediction by decomposing it into individual feature contributions.
@@ -199,6 +223,7 @@ impl Classifier {
             .expect("Model must be fitted before explanation.");
         // Validate that the number of columns in the input matches the number of features in the feature map
         let num_features = map.num_features;
+        let num_rows = x.nrows();
         if num_features != x.ncols() {
             panic!(
                 "Mismatched dimensions: The number of columns in the feature map ({}) must match the number of input columns ({}).",
@@ -207,14 +232,28 @@ impl Classifier {
             );
         }
 
-        // Map raw input to the feature space
-        let z_matrices = map.transform(x);
+        // Process in chunks to save memory
+        let chunk_size = 10000.min(num_rows);
+        let mut contributions = Mat::<f32>::zeros(num_rows, num_features);
 
-        // Parallel computation of comtribution vec
-        let contributions_vec: Vec<Col<f32>> = (0..x.ncols())
-            .into_par_iter()
-            .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
-            .collect();
-        Mat::from_fn(x.nrows(), x.ncols(), |i, j| contributions_vec[j][i])
+        for start_row in (0..num_rows).step_by(chunk_size) {
+            let end_row = (start_row + chunk_size).min(num_rows);
+            let n_chunk = end_row - start_row;
+            let x_chunk = x.as_ref().subrows(start_row, n_chunk);
+
+            let z_matrices = map.transform(&x_chunk.to_owned());
+
+            let chunk_contributions: Vec<Col<f32>> = (0..num_features)
+                .into_par_iter()
+                .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
+                .collect();
+
+            for j in 0..num_features {
+                for i in 0..n_chunk {
+                    contributions[(start_row + i, j)] = chunk_contributions[j][i];
+                }
+            }
+        }
+        contributions
     }
 }

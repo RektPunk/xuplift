@@ -84,32 +84,49 @@ impl Regressor {
         let y_centered = y - Col::<f32>::full(num_rows, self.base_value);
         let total_dim = num_features * num_bases;
 
-        // Initialize the Hessian $H = Z^T W Z$ and Gradient $g = Z^T W (y-b)$
-        let mut ridge_lhs = Mat::<f32>::zeros(total_dim, total_dim);
-        let mut rhs = Col::<f32>::zeros(total_dim);
+        // Accumulate Hessian and Gradient in parallel using a streaming approach.
+        let (mut ridge_lhs, rhs) = (0..num_rows)
+            .into_par_iter()
+            .fold(
+                || {
+                    (
+                        Mat::<f32>::zeros(total_dim, total_dim),
+                        Col::<f32>::zeros(total_dim),
+                    )
+                },
+                |(mut acc_h, mut acc_g), r| {
+                    let z_r = map.transform_row(x, r);
+                    let w = weights[r];
+                    let y_c = y_centered[r];
 
-        // Row-based accumulation to save memory:
-        // We compute $H$ and $g$ by iterating over rows $z_r$:
-        // $H = \sum_r w_r z_r z_r^T$
-        // $g = \sum_r w_r z_r (y_r - b)$
-        for r in 0..num_rows {
-            let z_r = map.transform_row(x, r);
-            let w = weights[r];
-            let y_c = y_centered[r];
-
-            // Accumulate RHS: Z_r^T * W * y_c
-            for i in 0..total_dim {
-                rhs[i] += z_r[i] * w * y_c;
-            }
-
-            // Accumulate Hessian: Z_r^T * W * Z_r
-            for i in 0..total_dim {
-                let val_i = z_r[i] * w;
-                for j in 0..total_dim {
-                    ridge_lhs[(i, j)] += val_i * z_r[j];
-                }
-            }
-        }
+                    for i in 0..total_dim {
+                        let z_i = z_r[i];
+                        acc_g[i] += z_i * w * y_c;
+                        let val_i = z_i * w;
+                        for j in 0..total_dim {
+                            acc_h[(i, j)] += val_i * z_r[j];
+                        }
+                    }
+                    (acc_h, acc_g)
+                },
+            )
+            .reduce(
+                || {
+                    (
+                        Mat::<f32>::zeros(total_dim, total_dim),
+                        Col::<f32>::zeros(total_dim),
+                    )
+                },
+                |(mut h1, mut g1), (h2, g2)| {
+                    for j in 0..total_dim {
+                        g1[j] += g2[j];
+                        for i in 0..total_dim {
+                            h1[(i, j)] += h2[(i, j)];
+                        }
+                    }
+                    (h1, g1)
+                },
+            );
 
         // Add L2 regularization (Ridge) to the diagonal
         for i in 0..total_dim {
@@ -148,22 +165,36 @@ impl Regressor {
                 x.ncols()
             );
         }
-        // Map raw input to the feature space
-        let z_matrices = map.transform(x);
 
-        // Parallel computation of y_pred = Sum(Z_i * coeff_i)
-        let prediction = (0..num_features)
-            .into_par_iter()
-            .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx]) // Z_i * coeff_i
-            .reduce(
-                || Col::<f32>::zeros(num_rows),
-                |mut acc, res| {
-                    acc += res;
-                    acc
-                },
-            );
-        // Restore the target scale by adding back the base value (mean)
-        prediction.map(|v| v + self.base_value)
+        // Process in chunks to avoid O(N * D * M) memory allocation for the full Z matrix.
+        let chunk_size = 10000.min(num_rows);
+        let mut prediction = Col::<f32>::zeros(num_rows);
+
+        for start_row in (0..num_rows).step_by(chunk_size) {
+            let end_row = (start_row + chunk_size).min(num_rows);
+            let n_chunk = end_row - start_row;
+            let x_chunk = x.as_ref().subrows(start_row, n_chunk);
+
+            // Map raw input to the feature space for this chunk
+            let z_matrices = map.transform(&x_chunk.to_owned());
+
+            // Parallel computation for the chunk: y_pred = Sum(Z_i * coeff_i)
+            let chunk_pred = (0..num_features)
+                .into_par_iter()
+                .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
+                .reduce(
+                    || Col::<f32>::zeros(n_chunk),
+                    |mut acc, res| {
+                        acc += res;
+                        acc
+                    },
+                );
+
+            for i in 0..n_chunk {
+                prediction[start_row + i] = chunk_pred[i] + self.base_value;
+            }
+        }
+        prediction
     }
 
     /// Explains the model's prediction by decomposing it into individual feature contributions.
@@ -177,6 +208,7 @@ impl Regressor {
             .expect("Model must be fitted before explanation.");
         // Validate that the number of columns in the input matches the number of features in the feature map
         let num_features = map.num_features;
+        let num_rows = x.nrows();
         if num_features != x.ncols() {
             panic!(
                 "Mismatched dimensions: The number of columns in the feature map ({}) must match the number of input columns ({}).",
@@ -184,14 +216,29 @@ impl Regressor {
                 x.ncols()
             );
         }
-        // Map raw input to the feature space
-        let z_matrices = map.transform(x);
 
-        // Parallel computation of comtribution vec
-        let contributions_vec: Vec<Col<f32>> = (0..num_features)
-            .into_par_iter()
-            .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
-            .collect();
-        Mat::from_fn(x.nrows(), num_features, |i, j| contributions_vec[j][i])
+        // Process in chunks to save memory
+        let chunk_size = 10000.min(num_rows);
+        let mut contributions = Mat::<f32>::zeros(num_rows, num_features);
+
+        for start_row in (0..num_rows).step_by(chunk_size) {
+            let end_row = (start_row + chunk_size).min(num_rows);
+            let n_chunk = end_row - start_row;
+            let x_chunk = x.as_ref().subrows(start_row, n_chunk);
+
+            let z_matrices = map.transform(&x_chunk.to_owned());
+
+            let chunk_contributions: Vec<Col<f32>> = (0..num_features)
+                .into_par_iter()
+                .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
+                .collect();
+
+            for j in 0..num_features {
+                for i in 0..n_chunk {
+                    contributions[(start_row + i, j)] = chunk_contributions[j][i];
+                }
+            }
+        }
+        contributions
     }
 }
