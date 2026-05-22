@@ -142,10 +142,17 @@ impl Classifier {
             }
 
             // Solve the normal equations (H * delta_w = gradient) using LDLT decomposition.
-            let delta_w = hessian.ldlt(faer::Side::Lower).unwrap().solve(&rhs);
+            // Use safe pattern to handle singular matrices without panics.
+            let delta_w = if let Ok(ldlt) = hessian.ldlt(faer::Side::Lower) {
+                ldlt.solve(&rhs)
+            } else {
+                // If Hessian is singular, stop iterations early.
+                break;
+            };
 
             // Convergence check based on the update magnitude.
-            if delta_w.iter().map(|x| x.abs()).sum::<f32>() <= 1e-6 {
+            let update_mag: f32 = delta_w.iter().map(|&x| x.abs()).sum();
+            if update_mag <= 1e-6 {
                 break;
             }
             w += delta_w;

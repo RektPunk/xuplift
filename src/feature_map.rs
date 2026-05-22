@@ -114,7 +114,7 @@ impl KernelFeatureMap {
                         dists.push((val_i - val_j).abs());
                     }
                 }
-                dists.sort_by(|a: &f32, b: &f32| a.partial_cmp(b).unwrap());
+                dists.sort_by(|a: &f32, b: &f32| a.total_cmp(b));
                 let median = if !dists.is_empty() {
                     let mid = dists.len() / 2;
                     if dists.len() % 2 == 0 {
@@ -126,7 +126,8 @@ impl KernelFeatureMap {
                     1.0
                 };
                 // Precision parameter $\gamma = 1 / (2 \cdot \text{median}^2)$
-                let s2_inv = 1.0 / (2.0 * (median.max(1e-6)).powi(2));
+                // Add a small epsilon to median to prevent extremely high gamma
+                let s2_inv = 1.0 / (2.0 * (median.max(1e-4)).powi(2));
 
                 // Store landmark values (bases)
                 let mut bases = Mat::<f32>::zeros(1, self.num_bases);
