@@ -49,21 +49,26 @@ impl SLearner {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
 
-        // Use a scratchpad to avoid redundant allocations for X
-        let mut scratch = Mat::<f32>::zeros(num_rows, num_cols + 1);
-        scratch
-            .as_mut()
-            .submatrix_mut(0, 0, num_rows, num_cols)
-            .copy_from(x);
-
-        // Case 1: Treatment = 1
-        scratch.as_mut().col_mut(num_cols).fill(1.0);
-        let pred_t1 = self.mu.predict(&scratch);
-
-        // Case 2: Treatment = 0
-        scratch.as_mut().col_mut(num_cols).fill(0.0);
-        let pred_t0 = self.mu.predict(&scratch);
-
+        let (pred_t1, pred_t0) = rayon::join(
+            || {
+                let mut scratch = Mat::<f32>::zeros(num_rows, num_cols + 1);
+                scratch
+                    .as_mut()
+                    .submatrix_mut(0, 0, num_rows, num_cols)
+                    .copy_from(x);
+                scratch.as_mut().col_mut(num_cols).fill(1.0);
+                self.mu.predict(&scratch)
+            },
+            || {
+                let mut scratch = Mat::<f32>::zeros(num_rows, num_cols + 1);
+                scratch
+                    .as_mut()
+                    .submatrix_mut(0, 0, num_rows, num_cols)
+                    .copy_from(x);
+                scratch.as_mut().col_mut(num_cols).fill(0.0);
+                self.mu.predict(&scratch)
+            },
+        );
         pred_t1 - pred_t0
     }
 
@@ -79,21 +84,24 @@ impl SLearner {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
 
-        // Calculate feature contributions under the treatment scenario (T=1)
-        let mut x_t1 = Mat::<f32>::zeros(num_rows, num_cols + 1);
-        x_t1.as_mut()
-            .submatrix_mut(0, 0, num_rows, num_cols)
-            .copy_from(x);
-        x_t1.as_mut().col_mut(num_cols).fill(1.0);
-        let exp_t1 = self.mu.explain(&x_t1);
-
-        // Calculate feature contributions under the control scenario (T=0)
-        let mut x_t0 = Mat::<f32>::zeros(num_rows, num_cols + 1);
-        x_t0.as_mut()
-            .submatrix_mut(0, 0, num_rows, num_cols)
-            .copy_from(x);
-        x_t0.as_mut().col_mut(num_cols).fill(0.0);
-        let exp_t0 = self.mu.explain(&x_t0);
+        let (exp_t1, exp_t0) = rayon::join(
+            || {
+                let mut x_t1 = Mat::<f32>::zeros(num_rows, num_cols + 1);
+                x_t1.as_mut()
+                    .submatrix_mut(0, 0, num_rows, num_cols)
+                    .copy_from(x);
+                x_t1.as_mut().col_mut(num_cols).fill(1.0);
+                self.mu.explain(&x_t1)
+            },
+            || {
+                let mut x_t0 = Mat::<f32>::zeros(num_rows, num_cols + 1);
+                x_t0.as_mut()
+                    .submatrix_mut(0, 0, num_rows, num_cols)
+                    .copy_from(x);
+                x_t0.as_mut().col_mut(num_cols).fill(0.0);
+                self.mu.explain(&x_t0)
+            },
+        );
 
         // The difference reveals the source of the treatment effect
         exp_t1 - exp_t0

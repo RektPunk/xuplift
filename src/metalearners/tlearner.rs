@@ -39,21 +39,26 @@ impl TLearner {
         let x_t0 = data_utils::filter_rows(x, &indices_t0);
         let y_t0 = data_utils::filter_elements(y, &indices_t0);
 
-        // Train Model for T=1
-        let mut mu_t1 = Regressor::new(mu_penalty);
-        mu_t1.fit(&x_t1, &y_t1);
-
-        // Train Model for T=0
-        let mut mu_t0 = Regressor::new(mu_penalty);
-        mu_t0.fit(&x_t0, &y_t0);
+        // Train Models in parallel
+        let (mu_t1, mu_t0) = rayon::join(
+            || {
+                let mut mu_t1 = Regressor::new(mu_penalty);
+                mu_t1.fit(&x_t1, &y_t1);
+                mu_t1
+            },
+            || {
+                let mut mu_t0 = Regressor::new(mu_penalty);
+                mu_t0.fit(&x_t0, &y_t0);
+                mu_t0
+            },
+        );
 
         Self { mu_t1, mu_t0 }
     }
 
     /// Estimates the uplift score: $\tau(x) = \hat{\mu}_1(x) - \hat{\mu}_0(x)$
     pub fn predict_uplift(&self, x: &Mat<f32>) -> Col<f32> {
-        let pred_t1 = self.mu_t1.predict(x);
-        let pred_t0 = self.mu_t0.predict(x);
+        let (pred_t1, pred_t0) = rayon::join(|| self.mu_t1.predict(x), || self.mu_t0.predict(x));
         pred_t1 - pred_t0
     }
 
@@ -66,8 +71,7 @@ impl TLearner {
     /// # Returns
     /// A matrix (n_samples x n_features) representing the incremental contribution of each feature.
     pub fn explain_uplift(&self, x: &Mat<f32>) -> Mat<f32> {
-        let exp_t1 = self.mu_t1.explain(x);
-        let exp_t0 = self.mu_t0.explain(x);
+        let (exp_t1, exp_t0) = rayon::join(|| self.mu_t1.explain(x), || self.mu_t0.explain(x));
         exp_t1 - exp_t0
     }
 }
