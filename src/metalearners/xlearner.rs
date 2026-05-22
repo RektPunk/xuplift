@@ -1,16 +1,21 @@
-use std::sync::Arc;
-
 use faer::{Col, Mat};
 
-use crate::feature_map::KernelFeatureMap;
 use crate::metalearners::data_utils;
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
 
 /// X-Learner for Uplift Modeling.
 ///
-/// This meta-learner is designed to handle significant class imbalance between
-/// treatment and control groups by cross-predicting counterfactuals.
+/// This learner uses a three-stage process:
+/// 1. Train outcome models $\mu_1(x)$ and $\mu_0(x)$.
+/// 2. Impute treatment effects:
+///    $D_1 = Y_1 - \mu_0(X_1)$
+///    $D_0 = \mu_1(X_0) - Y_0$
+/// 3. Train models $\tau_1(x)$ and $\tau_0(x)$ to predict $D_1$ and $D_0$.
+///
+/// The uplift is the propensity-weighted average:
+/// $\tau(x) = g(x) \tau_0(x) + (1 - g(x)) \tau_1(x)$
+/// where $g(x)$ is the propensity score $E[T|X]$.
 pub struct XLearner {
     /// Imputed effect models
     pub tau_t1: Regressor,
@@ -53,18 +58,12 @@ impl XLearner {
         let y_t0 = data_utils::filter_elements(y, &indices_t0);
 
         // Train outcome model for T=1
-        let mut map_t1 = KernelFeatureMap::new();
-        map_t1.fit(&x_t1);
-        let map_t1_arc = Arc::new(map_t1);
-        let mut mu_1 = Regressor::new(Arc::clone(&map_t1_arc), mu_penalty);
-        mu_1.fit(&y_t1);
+        let mut mu_1 = Regressor::new(mu_penalty);
+        mu_1.fit(&x_t1, &y_t1);
 
         // Train outcome model for T=0
-        let mut map_t0 = KernelFeatureMap::new();
-        map_t0.fit(&x_t0);
-        let map_t0_arc = Arc::new(map_t0);
-        let mut mu_0 = Regressor::new(Arc::clone(&map_t0_arc), mu_penalty);
-        mu_0.fit(&y_t0);
+        let mut mu_0 = Regressor::new(mu_penalty);
+        mu_0.fit(&x_t0, &y_t0);
 
         // Impute Treatment Effects and Train tau models
         // D_1 = Y_t1 - mu_0(X_t1): Actual treated outcome minus predicted control outcome (if they hadn't been treated)
@@ -74,17 +73,14 @@ impl XLearner {
         let d_0 = &mu_1.predict(&x_t0) - &y_t0;
 
         // Train tau models to estimate these imputed treatment effects (D_1, D_0)
-        let mut tau_t1 = Regressor::new(map_t1_arc, tau_penalty);
-        tau_t1.fit(&d_1);
-        let mut tau_t0 = Regressor::new(map_t0_arc, tau_penalty);
-        tau_t0.fit(&d_0);
+        let mut tau_t1 = Regressor::new(tau_penalty);
+        tau_t1.fit(&x_t1, &d_1);
+        let mut tau_t0 = Regressor::new(tau_penalty);
+        tau_t0.fit(&x_t0, &d_0);
 
         // Train Propensity Model (g): Predict T given X
-        let mut propensity_map = KernelFeatureMap::new();
-        propensity_map.fit(x);
-        let propensity_map_arc = Arc::new(propensity_map);
-        let mut p = Classifier::new(propensity_map_arc, p_penalty, p_max_iter);
-        p.fit(t);
+        let mut p = Classifier::new(p_penalty, p_max_iter);
+        p.fit(x, t);
 
         Self { tau_t1, tau_t0, p }
     }

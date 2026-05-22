@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use faer::{Col, Mat};
 use numpy::ndarray::{Array1, Array2};
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
@@ -50,18 +48,15 @@ pub struct PyClassifier {
 #[pymethods]
 impl PyClassifier {
     #[new]
-    fn new(x: PyReadonlyArray2<f32>, penalty: f32, max_iter: usize) -> Self {
-        let x_mat = convert_to_faer_mat(x);
-        let mut map_x = KernelFeatureMap::new();
-        map_x.fit(&x_mat);
-        let map_t1_arc = Arc::new(map_x);
-        let classifier = Classifier::new(map_t1_arc, penalty, max_iter);
+    fn new(penalty: f32, max_iter: usize) -> Self {
+        let classifier = Classifier::new(penalty, max_iter);
         PyClassifier { inner: classifier }
     }
 
-    fn fit(&mut self, y: PyReadonlyArray1<f32>) {
+    fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
+        let x_mat = convert_to_faer_mat(x);
         let y_col = convert_to_faer_col(y);
-        self.inner.fit(&y_col);
+        self.inner.fit(&x_mat, &y_col);
     }
 
     fn predict<'py>(
@@ -94,18 +89,15 @@ pub struct PyRegressor {
 #[pymethods]
 impl PyRegressor {
     #[new]
-    fn new(x: PyReadonlyArray2<f32>, penalty: f32) -> Self {
-        let x_mat = convert_to_faer_mat(x);
-        let mut map_x = KernelFeatureMap::new();
-        map_x.fit(&x_mat);
-        let map_t1_arc = Arc::new(map_x);
-        let regressor = Regressor::new(map_t1_arc, penalty);
+    fn new(penalty: f32) -> Self {
+        let regressor = Regressor::new(penalty);
         PyRegressor { inner: regressor }
     }
 
-    fn fit(&mut self, y: PyReadonlyArray1<f32>) {
+    fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
+        let x_mat = convert_to_faer_mat(x);
         let y_col = convert_to_faer_col(y);
-        self.inner.fit(&y_col);
+        self.inner.fit(&x_mat, &y_col);
     }
 
     fn predict<'py>(

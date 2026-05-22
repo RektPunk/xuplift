@@ -10,9 +10,9 @@ def uplift_data():
     n_features = 3
     x = np.random.randn(n_samples, n_features).astype(np.float32)
     t = np.random.randint(0, 2, n_samples).astype(np.float32)
-    # Uplift depends on x[0]
+    uplift = x[:, 0] * 2  # Uplift depends on x[0]
+
     # y = base_effect + t * uplift + noise
-    uplift = x[:, 0] * 2
     y = (x[:, 1] + t * uplift + np.random.randn(n_samples) * 0.1).astype(np.float32)
     return x, t, y
 

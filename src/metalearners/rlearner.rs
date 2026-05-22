@@ -1,15 +1,14 @@
-use std::sync::Arc;
-
 use faer::{Col, Mat};
 
-use crate::feature_map::KernelFeatureMap;
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
 
 /// R-Learner for Uplift Modeling.
 ///
-/// Based on Robinson's transformation, this learner focuses on the residual-on-residual
-/// regression to directly estimate the Heterogeneous Treatment Effect (HTE).
+/// This learner focuses on the residual-on-residual regression.
+/// It first trains an outcome model $m(x) = E[Y|X]$ and a propensity model $e(x) = E[T|X]$.
+/// The treatment effect $\tau(x)$ is then estimated by minimizing the R-objective:
+/// $$\min_{\tau} \sum_{i=1}^n [ (y_i - m(x_i)) - (t_i - e(x_i)) \tau(x_i) ]^2$$
 pub struct RLearner {
     /// Treatment effect model
     pub tau: Regressor,
@@ -38,18 +37,12 @@ impl RLearner {
         let num_rows = x.nrows();
 
         // Train mu(x): Outcome model (E[Y|X])
-        let mut mu_map = KernelFeatureMap::new();
-        mu_map.fit(x);
-        let mu_map_arc = Arc::new(mu_map);
-        let mut mu = Regressor::new(Arc::clone(&mu_map_arc), mu_penalty);
-        mu.fit(y);
+        let mut mu = Regressor::new(mu_penalty);
+        mu.fit(x, y);
 
         // Train p(x): Propensity model (E[T|X])
-        let mut p_map = KernelFeatureMap::new();
-        p_map.fit(x);
-        let p_map_arc = Arc::new(p_map);
-        let mut p = Classifier::new(p_map_arc, p_penalty, p_max_iter);
-        p.fit(t);
+        let mut p = Classifier::new(p_penalty, p_max_iter);
+        p.fit(x, t);
 
         // Compute Residuals
         let mu_pred = mu.predict(x);
@@ -74,10 +67,8 @@ impl RLearner {
         }
 
         // Train the final tau model on the R-objective target with weights
-        let mut tau_map = KernelFeatureMap::new();
-        tau_map.fit(x);
-        let mut tau = Regressor::new(Arc::new(tau_map), tau_penalty);
-        tau.fit_weighted(&r_target, &r_weights);
+        let mut tau = Regressor::new(tau_penalty);
+        tau.fit_weighted(x, &r_target, &r_weights);
 
         Self { tau }
     }

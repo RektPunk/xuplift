@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use faer::{Col, Mat};
 use rand::RngExt;
 
@@ -38,19 +36,11 @@ fn test_gaussian_classification() {
         }
     }
 
-    // 2. Setup and Fit Kernel Feature Map
-    // Project input features into a high-dimensional space using the Nystrom approximation.
-    let mut map = KernelFeatureMap::new();
-    map.fit(&x);
-    let map_arc = Arc::new(map);
+    // Setup and Fit Classifier (IRLS)
+    let mut model = Classifier::new(penalty, 20); // Perform 20 iterations for convergence
+    model.fit(&x, &y);
 
-    // 3. Setup and Fit Classifier (IRLS)
-    // Train a Logistic Regression model using Iteratively Reweighted Least Squares (IRLS).
-    let mut model = Classifier::new(map_arc, penalty, 20);
-    model.fit(&y); // Perform 20 iterations for convergence
-
-    // 4. Verify Accuracy
-    // Ensure that the model can linearly separate the kernel-mapped Gaussian blobs.
+    // Verify Accuracy
     let probs = model.predict(&x);
     let mut correct = 0;
     for i in 0..n_samples {
@@ -66,9 +56,8 @@ fn test_gaussian_classification() {
         accuracy * 100.0
     );
 
-    // 5. Verify Explanation Consistency
-    // In Logistic Regression, the explanation provides feature contributions in the logit space.
-    // We verify that: Sigmoid(Sum(Contributions) + Base_Value) == Predicted_Probability
+    // Verify Explanation Consistency:
+    // Sigmoid(Sum(Contributions) + Base_Value) == Predicted_Probability
     let explanation = model.explain(&x);
 
     for i in 0..n_samples {
@@ -94,4 +83,35 @@ fn test_gaussian_classification() {
         );
     }
     println!("Classification explanation check passed for Gaussian Blobs.");
+}
+
+#[test]
+fn test_classifier_with_nans() {
+    let n_samples = 100;
+    let n_features = 2;
+    let mut x = Mat::<f32>::zeros(n_samples, n_features);
+    let mut y = Col::<f32>::zeros(n_samples);
+
+    for i in 0..n_samples {
+        x[(i, 0)] = i as f32;
+        x[(i, 1)] = if i % 10 == 0 {
+            f32::NAN
+        } else {
+            (i as f32).sin()
+        };
+        y[i] = if i < n_samples / 2 { 0.0 } else { 1.0 };
+    }
+
+    let mut model = Classifier::new(0.01, 5);
+    model.fit(&x, &y);
+
+    // Check if predictions for NaN rows are still returning values
+    let probs = model.predict(&x);
+    for i in 0..n_samples {
+        assert!(
+            !probs[i].is_nan(),
+            "Probability should not be NaN for sample {}",
+            i
+        );
+    }
 }

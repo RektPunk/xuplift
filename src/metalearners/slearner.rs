@@ -1,14 +1,13 @@
-use std::sync::Arc;
-
 use faer::{Col, Mat};
 
-use crate::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
 /// S-Learner (Single Learner) for Uplift Modeling using a Kernel-based Regressor.
 ///
-/// This learner treats the treatment assignment as an additional feature in a single response surface model.
-/// The Individual Treatment Effect (ITE) is estimated by taking the difference between predictions with the treatment feature set to 1 and 0.
+/// This learner treats the treatment assignment $T$ as an additional feature in a single response surface model:
+/// $$\mu(x, t) = E[Y | X=x, T=t]$$
+/// The uplift is estimated as:
+/// $$\tau(x) = \mu(x, 1) - \mu(x, 0)$$
 pub struct SLearner {
     /// The underlying Regressor trained on augmented features (X, T).
     pub mu: Regressor,
@@ -38,14 +37,9 @@ impl SLearner {
             x_combined[(i, num_cols)] = t[i];
         }
 
-        // Initialize and fit the KernelFeatureMap with the augmented dimension (k + 1)
-        let mut feature_map = KernelFeatureMap::new();
-        feature_map.fit(&x_combined);
-        let map_arc = Arc::new(feature_map);
-
-        // Initialize and fit the Regressor using the generated kernel features
-        let mut mu = Regressor::new(map_arc, mu_penalty);
-        mu.fit(y);
+        // Initialize and fit the Regressor using the augmented features
+        let mut mu = Regressor::new(mu_penalty);
+        mu.fit(&x_combined, y);
 
         Self { mu }
     }
@@ -79,8 +73,8 @@ impl SLearner {
     /// showing how the treatment changes the impact of each variable on the outcome.
     ///
     /// # Returns
-    /// A matrix of dimensions (n_samples x n_features + 1), where the last column
-    /// represents the direct effect of the treatment variable itself.
+    /// A matrix of dimensions (n_samples x (n_features + 1)),
+    /// where the last column represents the direct effect of the treatment variable itself.
     pub fn explain_uplift(&self, x: &Mat<f32>) -> Mat<f32> {
         let num_rows = x.nrows();
         let num_cols = x.ncols();

@@ -7,9 +7,14 @@ use rayon::prelude::*;
 use crate::feature_map::KernelFeatureMap;
 
 /// A Ridge Regressor that uses transformed non-linear features.
+///
+/// It solves the Global Ridge Regression problem in the transformed feature space $Z$:
+/// $$\min_{\alpha} ||y - Z\alpha - b||^2 + \lambda ||\alpha||^2$$
+/// where $Z$ is the $n \times (d \cdot m)$ matrix of kernel-mapped features,
+/// $\alpha$ are the coefficients, $b$ is the intercept, and $\lambda$ is the penalty.
 pub struct Regressor {
     /// The kernel_feature_map responsible for kernel-based feature mapping.
-    pub kernel_feature_map: Arc<KernelFeatureMap>,
+    pub kernel_feature_map: Option<Arc<KernelFeatureMap>>,
     /// The Ridge regularization penalty factor.
     pub penalty: f32,
     /// The global mean of the target variable (used for centering).
@@ -19,10 +24,10 @@ pub struct Regressor {
 }
 
 impl Regressor {
-    /// Creates a new Regressor instance with a fitted KernelFeatureMap.
-    pub fn new(kernel_feature_map: Arc<KernelFeatureMap>, penalty: f32) -> Self {
+    /// Creates a new Regressor instance.
+    pub fn new(penalty: f32) -> Self {
         Self {
-            kernel_feature_map,
+            kernel_feature_map: None,
             penalty,
             base_value: 0.0,
             coefficients: Vec::new(),
@@ -31,25 +36,32 @@ impl Regressor {
 
     /// Fits the model using Global Ridge Regression.
     ///
-    /// This method solves the system: (Z^T * Z + lambda * I) * alpha = Z^T * y_centered
-    pub fn fit(&mut self, y: &Col<f32>) {
-        let num_rows = self.kernel_feature_map.num_rows;
-        let weights = Col::<f32>::full(num_rows, 1.0);
-        self.fit_weighted(y, &weights);
+    /// This method solves the system: $(Z^T Z + \lambda I) \alpha = Z^T (y - b)$
+    pub fn fit(&mut self, x: &Mat<f32>, y: &Col<f32>) {
+        let weights = Col::<f32>::full(x.nrows(), 1.0);
+        self.fit_weighted(x, y, &weights);
     }
 
     /// Fits the model using Weighted Global Ridge Regression.
     ///
-    /// This method solves the system: (Z^T * W * Z + lambda * I) * alpha = Z^T * W * y_centered
-    /// where W is a diagonal weight matrix.
-    pub fn fit_weighted(&mut self, y: &Col<f32>, weights: &Col<f32>) {
-        let num_rows = self.kernel_feature_map.num_rows;
-        let num_features = self.kernel_feature_map.num_features;
-        let num_bases = self.kernel_feature_map.num_bases;
+    /// This method solves the system: $(Z^T W Z + \lambda I) \alpha = Z^T W (y - b)$
+    /// where $W$ is a diagonal weight matrix.
+    ///
+    /// The system is solved efficiently using LDLT decomposition of the Hessian.
+    pub fn fit_weighted(&mut self, x: &Mat<f32>, y: &Col<f32>, weights: &Col<f32>) {
+        // Initialize and fit the kernel map if it hasn't been set yet
+        let mut map = KernelFeatureMap::new();
+        map.fit(x);
 
+        // Allocate space for coefficients and compute initial values
+        let num_rows = x.nrows();
+        let num_features = map.num_features;
+        let num_bases = map.num_bases;
+
+        // Validate that the number of rows matches the number of target values
         if num_rows != y.nrows() || num_rows != weights.nrows() {
             panic!(
-                "Mismatched dimensions: The number of rows in the feature map ({}) must match the number of target values ({}) and weights ({}).",
+                "Mismatched dimensions: The number of rows in X ({}) must match the number of target values ({}) and weights ({}).",
                 num_rows,
                 y.nrows(),
                 weights.nrows()
@@ -57,6 +69,7 @@ impl Regressor {
         }
 
         let total_weight: f32 = weights.iter().sum();
+        // The base_value $b$ is the weighted mean of the target $y$.
         self.base_value = if total_weight > 1e-6 {
             weights
                 .iter()
@@ -71,38 +84,29 @@ impl Regressor {
         let y_centered = y - Col::<f32>::full(num_rows, self.base_value);
         let total_dim = num_features * num_bases;
 
-        // Initialize the Hessian (LHS) and Gradient (RHS) for the normal equations
+        // Initialize the Hessian $H = Z^T W Z$ and Gradient $g = Z^T W (y-b)$
         let mut ridge_lhs = Mat::<f32>::zeros(total_dim, total_dim);
         let mut rhs = Col::<f32>::zeros(total_dim);
 
-        // Block-based accumulation to save memory:
-        // We compute ridge_lhs = Z^T * W * Z and rhs = Z^T * W * y_centered
-        // by iterating over feature blocks Z_i and Z_j.
-        for i in 0..num_features {
-            let z_i = &self.kernel_feature_map.z_matrices[i];
-            let offset_i = i * num_bases;
+        // Row-based accumulation to save memory:
+        // We compute $H$ and $g$ by iterating over rows $z_r$:
+        // $H = \sum_r w_r z_r z_r^T$
+        // $g = \sum_r w_r z_r (y_r - b)$
+        for r in 0..num_rows {
+            let z_r = map.transform_row(x, r);
+            let w = weights[r];
+            let y_c = y_centered[r];
 
-            // Compute RHS contribution: Z_i^T * W * y_centered
-            for r in 0..num_rows {
-                let w_y = weights[r] * y_centered[r];
-                for k in 0..num_bases {
-                    rhs[offset_i + k] += z_i[(r, k)] * w_y;
-                }
+            // Accumulate RHS: Z_r^T * W * y_c
+            for i in 0..total_dim {
+                rhs[i] += z_r[i] * w * y_c;
             }
 
-            for j in 0..num_features {
-                let z_j = &self.kernel_feature_map.z_matrices[j];
-                let offset_j = j * num_bases;
-
-                // Accumulate Z_i^T * W * Z_j into the global Hessian matrix
-                for r in 0..num_rows {
-                    let w = weights[r];
-                    for k in 0..num_bases {
-                        let val_i = z_i[(r, k)] * w;
-                        for l in 0..num_bases {
-                            ridge_lhs[(offset_i + k, offset_j + l)] += val_i * z_j[(r, l)];
-                        }
-                    }
+            // Accumulate Hessian: Z_r^T * W * Z_r
+            for i in 0..total_dim {
+                let val_i = z_r[i] * w;
+                for j in 0..total_dim {
+                    ridge_lhs[(i, j)] += val_i * z_r[j];
                 }
             }
         }
@@ -122,13 +126,20 @@ impl Regressor {
                 alpha_total.as_ref().subrows(start, num_bases).to_owned()
             })
             .collect();
+
+        // Store the kernel map.
+        self.kernel_feature_map = Some(Arc::new(map));
     }
     /// Predicts target values for the given input matrix X.
     ///
-    /// It maps X to the kernel space and calculates the weighted sum of contributions.
+    /// The prediction is: $\hat{y} = Z \alpha + b = \sum_{j} (Z_j \alpha_j) + b$.
     pub fn predict(&self, x: &Mat<f32>) -> Col<f32> {
+        let map = self
+            .kernel_feature_map
+            .as_ref()
+            .expect("Model must be fitted before prediction.");
         // Validate that the number of columns in the input matches the number of features in the feature map
-        let num_features = self.kernel_feature_map.num_features;
+        let num_features = map.num_features;
         let num_rows = x.nrows();
         if num_features != x.ncols() {
             panic!(
@@ -138,7 +149,7 @@ impl Regressor {
             );
         }
         // Map raw input to the feature space
-        let z_matrices = self.kernel_feature_map.transform(x);
+        let z_matrices = map.transform(x);
 
         // Parallel computation of y_pred = Sum(Z_i * coeff_i)
         let prediction = (0..num_features)
@@ -158,10 +169,14 @@ impl Regressor {
     /// Explains the model's prediction by decomposing it into individual feature contributions.
     ///
     /// For each feature $i$, it calculates the contribution $C_i = Z_i \cdot \alpha_i$,
-    /// resulting in a matrix where each column represents the contribution of a specific feature.
+    /// such that $\sum C_i + b = \hat{y}$.
     pub fn explain(&self, x: &Mat<f32>) -> Mat<f32> {
+        let map = self
+            .kernel_feature_map
+            .as_ref()
+            .expect("Model must be fitted before explanation.");
         // Validate that the number of columns in the input matches the number of features in the feature map
-        let num_features = self.kernel_feature_map.num_features;
+        let num_features = map.num_features;
         if num_features != x.ncols() {
             panic!(
                 "Mismatched dimensions: The number of columns in the feature map ({}) must match the number of input columns ({}).",
@@ -170,7 +185,7 @@ impl Regressor {
             );
         }
         // Map raw input to the feature space
-        let z_matrices = self.kernel_feature_map.transform(x);
+        let z_matrices = map.transform(x);
 
         // Parallel computation of comtribution vec
         let contributions_vec: Vec<Col<f32>> = (0..num_features)
