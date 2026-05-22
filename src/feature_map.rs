@@ -253,6 +253,7 @@ impl KernelFeatureMap {
                 let proj = &self.proj_matrices[f_idx];
                 let mean = &self.feature_means[f_idx];
                 let s2_inv = self.s2_invs[f_idx];
+
                 for i in 0..n_samples {
                     let x_val = x[(i, f_idx)];
                     if !x_val.is_nan() {
@@ -262,16 +263,16 @@ impl KernelFeatureMap {
                         }
                     }
                 }
-                let mut z_batch = k_batch * proj;
 
+                let mut z_batch = k_batch * proj;
                 for i in 0..n_samples {
-                    if !x[(i, f_idx)].is_nan() {
+                    if x[(i, f_idx)].is_nan() {
                         for j in 0..self.num_bases {
-                            z_batch[(i, j)] -= mean[j];
+                            z_batch[(i, j)] = 0.0;
                         }
                     } else {
                         for j in 0..self.num_bases {
-                            z_batch[(i, j)] = 0.0;
+                            z_batch[(i, j)] -= mean[j];
                         }
                     }
                 }
