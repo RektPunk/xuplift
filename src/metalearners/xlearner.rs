@@ -57,46 +57,63 @@ impl XLearner {
         let x_t0 = data_utils::filter_rows(x, &indices_t0);
         let y_t0 = data_utils::filter_elements(y, &indices_t0);
 
-        // Train outcome model for T=1
-        let mut mu_1 = Regressor::new(mu_penalty);
-        mu_1.fit(&x_t1, &y_t1);
+        // Train outcome models
+        let (mu_1, mu_0) = rayon::join(
+            || {
+                let mut mu_1 = Regressor::new(mu_penalty);
+                mu_1.fit(&x_t1, &y_t1);
+                mu_1
+            },
+            || {
+                let mut mu_0 = Regressor::new(mu_penalty);
+                mu_0.fit(&x_t0, &y_t0);
+                mu_0
+            },
+        );
 
-        // Train outcome model for T=0
-        let mut mu_0 = Regressor::new(mu_penalty);
-        mu_0.fit(&x_t0, &y_t0);
+        // Impute Treatment Effects
+        let (d_1, d_0) = rayon::join(
+            || &y_t1 - &mu_0.predict(&x_t1),
+            || &mu_1.predict(&x_t0) - &y_t0,
+        );
 
-        // Impute Treatment Effects and Train tau models
-        // D_1 = Y_t1 - mu_0(X_t1): Actual treated outcome minus predicted control outcome (if they hadn't been treated)
-        let d_1 = &y_t1 - &mu_0.predict(&x_t1);
-
-        // D_0 = mu_1(X_t0) - Y_t0: Predicted treated outcome (if they had been treated) minus actual control outcome
-        let d_0 = &mu_1.predict(&x_t0) - &y_t0;
-
-        // Train tau models to estimate these imputed treatment effects (D_1, D_0)
-        let mut tau_t1 = Regressor::new(tau_penalty);
-        tau_t1.fit(&x_t1, &d_1);
-        let mut tau_t0 = Regressor::new(tau_penalty);
-        tau_t0.fit(&x_t0, &d_0);
-
-        // Train Propensity Model (g): Predict T given X
-        let mut p = Classifier::new(p_penalty, p_max_iter);
-        p.fit(x, t);
+        // Train tau models and propensity model
+        let ((tau_t1, tau_t0), p) = rayon::join(
+            || {
+                rayon::join(
+                    || {
+                        let mut tau_t1 = Regressor::new(tau_penalty);
+                        tau_t1.fit(&x_t1, &d_1);
+                        tau_t1
+                    },
+                    || {
+                        let mut tau_t0 = Regressor::new(tau_penalty);
+                        tau_t0.fit(&x_t0, &d_0);
+                        tau_t0
+                    },
+                )
+            },
+            || {
+                let mut p = Classifier::new(p_penalty, p_max_iter);
+                p.fit(x, t);
+                p
+            },
+        );
 
         Self { tau_t1, tau_t0, p }
     }
 
     /// Estimates the uplift score: $\tau(x) = g(x)\hat{\tau}_0(x) + (1 - g(x))\hat{\tau}_1(x)$
     pub fn predict_uplift(&self, x: &Mat<f32>) -> Col<f32> {
-        let g = self.p.predict(x); // P(T=1 | X)
-        let t_1 = self.tau_t1.predict(x);
-        let t_0 = self.tau_t0.predict(x);
+        let (g, (t_1, t_0)) = rayon::join(
+            || self.p.predict(x), // P(T=1 | X)
+            || rayon::join(|| self.tau_t1.predict(x), || self.tau_t0.predict(x)),
+        );
 
-        let mut uplift = Col::<f32>::zeros(x.nrows());
-        for i in 0..x.nrows() {
+        Col::from_fn(x.nrows(), |i| {
             let gi = g[i].clamp(0.01, 0.99);
-            uplift[i] = gi * t_0[i] + (1.0 - gi) * t_1[i];
-        }
-        uplift
+            gi * t_0[i] + (1.0 - gi) * t_1[i]
+        })
     }
 
     /// Explains the uplift by decomposing the weighted feature contributions.
@@ -109,15 +126,12 @@ impl XLearner {
     /// # Returns
     /// A matrix (n_samples x n_features) representing how much each feature contributes to the final uplift score for each sample.
     pub fn explain_uplift(&self, x: &Mat<f32>) -> Mat<f32> {
-        let g = self.p.predict(x); // P(T=1 | X)
+        let (g, (exp_t1, exp_t0)) = rayon::join(
+            || self.p.predict(x), // P(T=1 | X)
+            || rayon::join(|| self.tau_t1.explain(x), || self.tau_t0.explain(x)),
+        );
 
-        let exp_t1 = self.tau_t1.explain(x);
-        let exp_t0 = self.tau_t0.explain(x);
-
-        let n_rows = x.nrows();
-        let n_cols = x.ncols();
-
-        Mat::from_fn(n_rows, n_cols, |i, j| {
+        Mat::from_fn(x.nrows(), x.ncols(), |i, j| {
             let gi = g[i].clamp(0.01, 0.99);
             gi * exp_t0[(i, j)] + (1.0 - gi) * exp_t1[(i, j)]
         })

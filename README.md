@@ -2,17 +2,19 @@
   <img src="https://capsule-render.vercel.app/api?type=transparent&height=300&color=gradient&text=xuplift&section=header&reversal=false&height=120&fontSize=90&fontColor=ff5500">
 </div>
 
-Explainable uplift modeling via linearized kernel feature maps, providing a collection of meta-learners.
+**xuplift** is a library for explainable uplift modeling. It uses linearized kernel feature maps to estimate treatment effects with both speed and mathematical rigor. Instead of computing a massive $N \times N$ kernel matrix, `xuplift` selects landmark points to project data into a finite-dimensional feature space.
+
+## Supported Models
+- Regressor: Kernel-based Ridge regressor for outcome and residual modeling.
+- Classifier: Kernel-based Logistic classifier for precise propensity score estimation.
+
+## Supported Meta-Learners
+- RLearner: Residual-on-residual estimator.
+- SLearner: Single-learner approach treating treatment as a feature.
+- TLearner: Two-learner approach for baseline causal analysis.
+- XLearner: Cross-learner optimized for significantly unbalanced treatment groups.
 
 # Installation
-Install using pip:
 ```bash
 pip install xuplift
 ```
-
-# Features
-- Regressor: High-performance regression engine for outcome and residual modeling.
-- Classifier: Optimized binary classifier for precise propensity score estimation.
-- RLearner: Advanced residual-on-residual estimator with built-in 2-fold cross-fitting to ensure unbiased treatment effect estimation.
-- XLearner: Optimized cross-learner designed to handle significantly unbalanced treatment groups.
-- TLearner/SLearner: Standard two-model and single-model estimators for baseline causal analysis.
