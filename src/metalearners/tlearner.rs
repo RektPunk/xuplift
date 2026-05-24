@@ -1,6 +1,5 @@
 use faer::{Col, Mat};
 
-use crate::metalearners::data_utils;
 use crate::xmodels::regressor::Regressor;
 
 /// T-Learner (Two-Learner) for Uplift Modeling using Kernel-based Regressors.
@@ -28,27 +27,20 @@ impl TLearner {
     pub fn new(x: &Mat<f32>, t: &Col<f32>, y: &Col<f32>, mu_penalty: f32) -> Self {
         let num_rows = x.nrows();
 
-        // Identify indices for T=1 and T=0
-        let indices_t1: Vec<usize> = (0..num_rows).filter(|&i| t[i] > 0.5).collect();
-        let indices_t0: Vec<usize> = (0..num_rows).filter(|&i| t[i] <= 0.5).collect();
+        // Create weights for T=1 and T=0
+        let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
+        let w_t0 = Col::<f32>::from_fn(num_rows, |i| if t[i] <= 0.5 { 1.0 } else { 0.0 });
 
-        // Create sub-matrices
-        let x_t1 = data_utils::filter_rows(x, &indices_t1);
-        let y_t1 = data_utils::filter_elements(y, &indices_t1);
-
-        let x_t0 = data_utils::filter_rows(x, &indices_t0);
-        let y_t0 = data_utils::filter_elements(y, &indices_t0);
-
-        // Train Models outcome models
+        // Train Models using weighted fitting on the full original matrix
         let (mu_t1, mu_t0) = rayon::join(
             || {
                 let mut mu_t1 = Regressor::new(mu_penalty);
-                mu_t1.fit(&x_t1, &y_t1);
+                mu_t1.fit_weighted(x, y, &w_t1);
                 mu_t1
             },
             || {
                 let mut mu_t0 = Regressor::new(mu_penalty);
-                mu_t0.fit(&x_t0, &y_t0);
+                mu_t0.fit_weighted(x, y, &w_t0);
                 mu_t0
             },
         );

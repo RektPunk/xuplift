@@ -1,6 +1,5 @@
 use faer::{Col, Mat};
 
-use crate::metalearners::data_utils;
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
 
@@ -47,35 +46,27 @@ impl XLearner {
     ) -> Self {
         let num_rows = x.nrows();
 
-        // Identify indices for T=1 and T=0
-        let indices_t1: Vec<usize> = (0..num_rows).filter(|&i| t[i] > 0.5).collect();
-        let indices_t0: Vec<usize> = (0..num_rows).filter(|&i| t[i] <= 0.5).collect();
+        // Create weights for T=1 and T=0// Create weights for T=1 and T=0
+        let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
+        let w_t0 = Col::<f32>::from_fn(num_rows, |i| if t[i] <= 0.5 { 1.0 } else { 0.0 });
 
-        // Create sub-matrices
-        let x_t1 = data_utils::filter_rows(x, &indices_t1);
-        let y_t1 = data_utils::filter_elements(y, &indices_t1);
-        let x_t0 = data_utils::filter_rows(x, &indices_t0);
-        let y_t0 = data_utils::filter_elements(y, &indices_t0);
-
-        // Train outcome models
+        // Train outcome models using weighted fitting on the full matrix
         let (mu_1, mu_0) = rayon::join(
             || {
                 let mut mu_1 = Regressor::new(mu_penalty);
-                mu_1.fit(&x_t1, &y_t1);
+                mu_1.fit_weighted(x, y, &w_t1);
                 mu_1
             },
             || {
                 let mut mu_0 = Regressor::new(mu_penalty);
-                mu_0.fit(&x_t0, &y_t0);
+                mu_0.fit_weighted(x, y, &w_t0);
                 mu_0
             },
         );
 
-        // Impute Treatment Effects
-        let (d_1, d_0) = rayon::join(
-            || &y_t1 - &mu_0.predict(&x_t1),
-            || &mu_1.predict(&x_t0) - &y_t0,
-        );
+        // Impute Treatment Effects: D1 = Y - mu_0(X), D0 = mu_1(X) - Y
+        // Compute these for all rows, but they will be filtered by weights during tau model fitting
+        let (d_1, d_0) = rayon::join(|| y - &mu_0.predict(x), || mu_1.predict(x) - y);
 
         // Train tau models and propensity model
         let ((tau_t1, tau_t0), p) = rayon::join(
@@ -83,12 +74,12 @@ impl XLearner {
                 rayon::join(
                     || {
                         let mut tau_t1 = Regressor::new(tau_penalty);
-                        tau_t1.fit(&x_t1, &d_1);
+                        tau_t1.fit_weighted(x, &d_1, &w_t1);
                         tau_t1
                     },
                     || {
                         let mut tau_t0 = Regressor::new(tau_penalty);
-                        tau_t0.fit(&x_t0, &d_0);
+                        tau_t0.fit_weighted(x, &d_0, &w_t0);
                         tau_t0
                     },
                 )
