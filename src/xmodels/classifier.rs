@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use faer::prelude::Solve;
-use faer::{Col, Mat};
+use faer::{Col, ColRef, Mat, MatRef};
 use rayon::prelude::*;
 
 use crate::feature_map::KernelFeatureMap;
@@ -50,7 +50,7 @@ impl Classifier {
     ///
     /// This implementation uses target centering (y - mean) to align with the Regressor's logic.
     /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column.
-    pub fn fit(&mut self, x: &Mat<f32>, y: &Col<f32>) {
+    pub fn fit(&mut self, x: &MatRef<f32>, y: &ColRef<f32>) {
         // Initialize and fit the kernel map
         let mut map = KernelFeatureMap::new();
         map.fit(x);
@@ -174,7 +174,7 @@ impl Classifier {
     /// Predicts class probabilities for the given input matrix X.
     ///
     /// Returns a vector of probabilities for the positive class (1).
-    pub fn predict(&self, x: &Mat<f32>) -> Col<f32> {
+    pub fn predict(&self, x: &MatRef<f32>) -> Col<f32> {
         let map = self
             .kernel_feature_map
             .as_ref()
@@ -199,7 +199,7 @@ impl Classifier {
             let n_chunk = end_row - start_row;
             let x_chunk = x.as_ref().subrows(start_row, n_chunk);
 
-            let z_matrices = map.transform(&x_chunk.to_owned());
+            let z_matrices = map.transform(&x_chunk);
 
             let chunk_pred = (0..num_features)
                 .into_par_iter()
@@ -223,7 +223,7 @@ impl Classifier {
     ///
     /// For each feature $i$, it calculates the contribution $C_i = Z_i \cdot \alpha_i$,
     /// resulting in a matrix where each column represents the contribution of a specific feature.
-    pub fn explain(&self, x: &Mat<f32>) -> Mat<f32> {
+    pub fn explain(&self, x: &MatRef<f32>) -> Mat<f32> {
         let map = self
             .kernel_feature_map
             .as_ref()
@@ -248,7 +248,7 @@ impl Classifier {
             let n_chunk = end_row - start_row;
             let x_chunk = x.as_ref().subrows(start_row, n_chunk);
 
-            let z_matrices = map.transform(&x_chunk.to_owned());
+            let z_matrices = map.transform(&x_chunk);
 
             let chunk_contributions: Vec<Col<f32>> = (0..num_features)
                 .into_par_iter()

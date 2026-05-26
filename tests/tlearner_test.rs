@@ -33,10 +33,10 @@ fn test_tlearner() {
     }
 
     // Initialize TLearner which splits data into T=1 and T=0 and trains two regressors.
-    let tlearner = TLearner::new(&x, &t, &y, 0.01);
+    let tlearner = TLearner::new(&x.as_ref(), &t.as_ref(), &y.as_ref(), 0.01);
 
     // Estimate Individual Treatment Effect (ITE)
-    let uplift_estimate = tlearner.predict_uplift(&x);
+    let uplift_estimate = tlearner.predict_uplift(&x.as_ref());
 
     // Verify if the average estimated uplift is close to the true effect.
     let mut sum_uplift = 0.0;
@@ -59,7 +59,7 @@ fn test_tlearner() {
     // Verify Mathematical Explanation Consistency
     // In T-Learner, the explanation is the difference between two models' contributions.
     // Mathematical Consistency: Σ(Contribution_T1 - Contribution_T0) == Predict_T1 - Predict_T0
-    let uplift_explanation = tlearner.explain_uplift(&x);
+    let uplift_explanation = tlearner.explain_uplift(&x.as_ref());
 
     // T-Learner's explanation matrix should have n_features columns (no T column).
     assert_eq!(uplift_explanation.ncols(), n_features);

@@ -1,4 +1,4 @@
-use faer::{Col, Mat};
+use faer::{Col, ColRef, Mat, MatRef};
 
 use crate::xmodels::regressor::Regressor;
 
@@ -21,7 +21,7 @@ impl SLearner {
     /// * `t` - The treatment assignment vector (n_samples, 0 or 1).
     /// * `y` - The observed outcome vector.
     /// * `mu_penalty` - The regularization penalty for the regressor.
-    pub fn new(x: &Mat<f32>, t: &Col<f32>, y: &Col<f32>, mu_penalty: f32) -> Self {
+    pub fn new(x: &MatRef<f32>, t: &ColRef<f32>, y: &ColRef<f32>, mu_penalty: f32) -> Self {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
         let mut x_combined = Mat::<f32>::zeros(num_rows, num_cols + 1);
@@ -39,13 +39,13 @@ impl SLearner {
 
         // Initialize and fit the Regressor using the augmented features
         let mut mu = Regressor::new(mu_penalty);
-        mu.fit(&x_combined, y);
+        mu.fit(&x_combined.as_ref(), y);
 
         Self { mu }
     }
 
     /// Estimates the uplift score: $\tau(x) = E[Y | X=x, T=1] - E[Y | X=x, T=0]$
-    pub fn predict_uplift(&self, x: &Mat<f32>) -> Col<f32> {
+    pub fn predict_uplift(&self, x: &MatRef<f32>) -> Col<f32> {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
 
@@ -57,7 +57,7 @@ impl SLearner {
                     .submatrix_mut(0, 0, num_rows, num_cols)
                     .copy_from(x);
                 scratch.as_mut().col_mut(num_cols).fill(1.0);
-                self.mu.predict(&scratch)
+                self.mu.predict(&scratch.as_ref())
             },
             || {
                 let mut scratch = Mat::<f32>::zeros(num_rows, num_cols + 1);
@@ -66,7 +66,7 @@ impl SLearner {
                     .submatrix_mut(0, 0, num_rows, num_cols)
                     .copy_from(x);
                 scratch.as_mut().col_mut(num_cols).fill(0.0);
-                self.mu.predict(&scratch)
+                self.mu.predict(&scratch.as_ref())
             },
         );
         pred_t1 - pred_t0
@@ -80,7 +80,7 @@ impl SLearner {
     /// # Returns
     /// A matrix of dimensions (n_samples x (n_features + 1)),
     /// where the last column represents the direct effect of the treatment variable itself.
-    pub fn explain_uplift(&self, x: &Mat<f32>) -> Mat<f32> {
+    pub fn explain_uplift(&self, x: &MatRef<f32>) -> Mat<f32> {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
 
@@ -91,7 +91,7 @@ impl SLearner {
                     .submatrix_mut(0, 0, num_rows, num_cols)
                     .copy_from(x);
                 x_t1.as_mut().col_mut(num_cols).fill(1.0);
-                self.mu.explain(&x_t1)
+                self.mu.explain(&x_t1.as_ref())
             },
             || {
                 let mut x_t0 = Mat::<f32>::zeros(num_rows, num_cols + 1);
@@ -99,7 +99,7 @@ impl SLearner {
                     .submatrix_mut(0, 0, num_rows, num_cols)
                     .copy_from(x);
                 x_t0.as_mut().col_mut(num_cols).fill(0.0);
-                self.mu.explain(&x_t0)
+                self.mu.explain(&x_t0.as_ref())
             },
         );
 

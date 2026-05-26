@@ -1,4 +1,4 @@
-use faer::{Col, Mat};
+use faer::{Col, ColRef, Mat, MatRef};
 use rayon::prelude::*;
 
 use crate::xmodels::classifier::Classifier;
@@ -27,9 +27,9 @@ impl RLearner {
     /// * `p_max_iter` - The maximum number of iterations for the propensity model.
     /// * `tau_penalty` - The regularization penalty for the treatment effect model.
     pub fn new(
-        x: &Mat<f32>,
-        t: &Col<f32>,
-        y: &Col<f32>,
+        x: &MatRef<f32>,
+        t: &ColRef<f32>,
+        y: &ColRef<f32>,
         mu_penalty: f32,
         p_penalty: f32,
         p_max_iter: usize,
@@ -76,13 +76,13 @@ impl RLearner {
 
         // Train the final tau model on the R-objective target with weights
         let mut tau = Regressor::new(tau_penalty);
-        tau.fit_weighted(x, &r_target_col, &r_weights_col);
+        tau.fit_weighted(x, &r_target_col.as_ref(), &r_weights_col);
 
         Self { tau }
     }
 
     /// Estimates the uplift score: $\hat{\tau}(x) = \arg\min_{\tau} \sum [ (Y - m(x)) - (T - e(x)) \cdot \tau(x) ]^2$
-    pub fn predict_uplift(&self, x: &Mat<f32>) -> Col<f32> {
+    pub fn predict_uplift(&self, x: &MatRef<f32>) -> Col<f32> {
         self.tau.predict(x)
     }
 
@@ -97,7 +97,7 @@ impl RLearner {
     /// # Returns
     /// A matrix (n_samples x n_features) showing the attribution of each feature
     /// to the final estimated Treatment Effect.
-    pub fn explain_uplift(&self, x: &Mat<f32>) -> Mat<f32> {
+    pub fn explain_uplift(&self, x: &MatRef<f32>) -> Mat<f32> {
         self.tau.explain(x)
     }
 }

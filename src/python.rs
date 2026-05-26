@@ -1,6 +1,6 @@
-use faer::{Col, Mat};
+use faer::{Col, ColRef, Mat, MatRef};
 use numpy::ndarray::{Array1, Array2};
-use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
+use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
 pub use crate::feature_map::KernelFeatureMap;
@@ -12,14 +12,19 @@ pub use crate::metalearners::slearner::SLearner;
 pub use crate::metalearners::tlearner::TLearner;
 pub use crate::metalearners::xlearner::XLearner;
 
-fn convert_to_faer_mat(x: PyReadonlyArray2<f32>) -> Mat<f32> {
-    let x_view = x.as_array();
-    Mat::from_fn(x_view.nrows(), x_view.ncols(), |i, j| x_view[[i, j]])
+fn convert_to_faer_mat(x: PyReadonlyArray2<'_, f32>) -> MatRef<'_, f32> {
+    let raw_arr = x.as_raw_array();
+    let nrows = raw_arr.nrows();
+    let ncols = raw_arr.ncols();
+    let strides: [isize; 2] = raw_arr.strides().try_into().unwrap();
+    unsafe { MatRef::from_raw_parts(raw_arr.as_ptr(), nrows, ncols, strides[0], strides[1]) }
 }
 
-fn convert_to_faer_col(x: PyReadonlyArray1<f32>) -> Col<f32> {
-    let x_view = x.as_array();
-    Col::from_fn(x_view.len(), |i| x_view[i])
+fn convert_to_faer_col(x: PyReadonlyArray1<'_, f32>) -> ColRef<'_, f32> {
+    let raw_arr = x.as_raw_array();
+    let nrows = raw_arr.len();
+    let strides: [isize; 1] = raw_arr.strides().try_into().unwrap();
+    unsafe { ColRef::from_raw_parts(raw_arr.as_ptr(), nrows, strides[0]) }
 }
 
 fn convert_to_numpy_mat(x: Mat<f32>) -> Array2<f32> {
@@ -30,11 +35,11 @@ fn convert_to_numpy_col(x: Col<f32>) -> Array1<f32> {
     Array1::from_iter(x.iter().copied())
 }
 
-fn prepare_input(
-    x: PyReadonlyArray2<f32>,
-    t: PyReadonlyArray1<f32>,
-    y: PyReadonlyArray1<f32>,
-) -> (Mat<f32>, Col<f32>, Col<f32>) {
+fn prepare_input<'a>(
+    x: PyReadonlyArray2<'a, f32>,
+    t: PyReadonlyArray1<'a, f32>,
+    y: PyReadonlyArray1<'a, f32>,
+) -> (MatRef<'a, f32>, ColRef<'a, f32>, ColRef<'a, f32>) {
     let x_mat = convert_to_faer_mat(x);
     let t_col = convert_to_faer_col(t);
     let y_col = convert_to_faer_col(y);

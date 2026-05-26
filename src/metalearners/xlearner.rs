@@ -1,4 +1,4 @@
-use faer::{Col, Mat};
+use faer::{Col, ColRef, Mat, MatRef};
 
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
@@ -36,9 +36,9 @@ impl XLearner {
     /// * `p_max_iter` - The maximum number of iterations for the propensity model.
     /// * `tau_penalty` - The regularization penalty for the tau models.
     pub fn new(
-        x: &Mat<f32>,
-        t: &Col<f32>,
-        y: &Col<f32>,
+        x: &MatRef<f32>,
+        t: &ColRef<f32>,
+        y: &ColRef<f32>,
         mu_penalty: f32,
         p_penalty: f32,
         p_max_iter: usize,
@@ -46,7 +46,7 @@ impl XLearner {
     ) -> Self {
         let num_rows = x.nrows();
 
-        // Create weights for T=1 and T=0// Create weights for T=1 and T=0
+        // Create weights for T=1 and T=0
         let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
         let w_t0 = Col::<f32>::from_fn(num_rows, |i| if t[i] <= 0.5 { 1.0 } else { 0.0 });
 
@@ -74,12 +74,12 @@ impl XLearner {
                 rayon::join(
                     || {
                         let mut tau_t1 = Regressor::new(tau_penalty);
-                        tau_t1.fit_weighted(x, &d_1, &w_t1);
+                        tau_t1.fit_weighted(x, &d_1.as_ref(), &w_t1);
                         tau_t1
                     },
                     || {
                         let mut tau_t0 = Regressor::new(tau_penalty);
-                        tau_t0.fit_weighted(x, &d_0, &w_t0);
+                        tau_t0.fit_weighted(x, &d_0.as_ref(), &w_t0);
                         tau_t0
                     },
                 )
@@ -95,7 +95,7 @@ impl XLearner {
     }
 
     /// Estimates the uplift score: $\tau(x) = g(x)\hat{\tau}_0(x) + (1 - g(x))\hat{\tau}_1(x)$
-    pub fn predict_uplift(&self, x: &Mat<f32>) -> Col<f32> {
+    pub fn predict_uplift(&self, x: &MatRef<f32>) -> Col<f32> {
         let (g, (t_1, t_0)) = rayon::join(
             || self.p.predict(x), // P(T=1 | X)
             || rayon::join(|| self.tau_t1.predict(x), || self.tau_t0.predict(x)),
@@ -116,7 +116,7 @@ impl XLearner {
     ///
     /// # Returns
     /// A matrix (n_samples x n_features) representing how much each feature contributes to the final uplift score for each sample.
-    pub fn explain_uplift(&self, x: &Mat<f32>) -> Mat<f32> {
+    pub fn explain_uplift(&self, x: &MatRef<f32>) -> Mat<f32> {
         let (g, (exp_t1, exp_t0)) = rayon::join(
             || self.p.predict(x), // P(T=1 | X)
             || rayon::join(|| self.tau_t1.explain(x), || self.tau_t0.explain(x)),

@@ -35,10 +35,10 @@ fn test_xlearner() {
 
     // X-Learner internally trains 5 models:
     // Stage 1: mu_1, mu_0 | Stage 2: tau_1, tau_0 | Stage 3: p (propensity)
-    let xlearner = XLearner::new(&x, &t, &y, 0.1, 0.1, 20, 0.1);
+    let xlearner = XLearner::new(&x.as_ref(), &t.as_ref(), &y.as_ref(), 0.1, 0.1, 20, 0.1);
 
     // Estimate Individual Treatment Effect (ITE): g(x)*tau_0 + (1-g(x))*tau_1
-    let uplift_estimate = xlearner.predict_uplift(&x);
+    let uplift_estimate = xlearner.predict_uplift(&x.as_ref());
 
     // Verify if the average estimated uplift is close to the true effect.
     let mut sum_uplift = 0.0;
@@ -61,8 +61,8 @@ fn test_xlearner() {
     // Verify Mathematical Explanation Consistency
     // In X-Learner, the explanation must account for the dynamic base value
     // caused by the propensity-weighted blending of two models.
-    let uplift_explanation = xlearner.explain_uplift(&x);
-    let propensity = xlearner.p.predict(&x);
+    let uplift_explanation = xlearner.explain_uplift(&x.as_ref());
+    let propensity = xlearner.p.predict(&x.as_ref());
 
     for i in 0..x.nrows() {
         let mut feature_contribution_sum = 0.0;

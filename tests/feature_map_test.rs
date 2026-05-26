@@ -6,7 +6,7 @@ fn test_feature_map_basic_functionality() {
     // Verify that the KernelFeatureMap initializes and fits correctly on a standard linear dataset.
     let data = Mat::from_fn(10, 2, |r, c| (r as f32) + (c as f32));
     let mut kfm = KernelFeatureMap::new();
-    kfm.fit(&data);
+    kfm.fit(&data.as_ref());
 
     assert_eq!(kfm.num_features, 2);
     assert!(kfm.num_bases > 0);
@@ -21,9 +21,9 @@ fn test_transform_batch() {
     // Verify that the batch transform operation produces matrices with the correct dimensions.
     let data = Mat::from_fn(5, 2, |r, c| (r as f32) * (c as f32 + 1.0));
     let mut kfm = KernelFeatureMap::new();
-    kfm.fit(&data);
+    kfm.fit(&data.as_ref());
 
-    let transformed = kfm.transform(&data);
+    let transformed = kfm.transform(&data.as_ref());
     assert_eq!(transformed.len(), 2);
     assert_eq!(transformed[0].nrows(), 5);
     assert_eq!(transformed[0].ncols(), kfm.num_bases);
@@ -34,11 +34,11 @@ fn test_transform_row_matches_transform_batch() {
     // Verify that transforming rows individually yields identical results to batch transformation.
     let data = Mat::from_fn(5, 2, |r, c| (r as f32) + (c as f32));
     let mut kfm = KernelFeatureMap::new();
-    kfm.fit(&data);
+    kfm.fit(&data.as_ref());
 
-    let transformed_batch = kfm.transform(&data);
+    let transformed_batch = kfm.transform(&data.as_ref());
     for row_idx in 0..5 {
-        let transformed_row = kfm.transform_row(&data, row_idx);
+        let transformed_row = kfm.transform_row(&data.as_ref(), row_idx);
         for f_idx in 0..2 {
             let offset = f_idx * kfm.num_bases;
             for b in 0..kfm.num_bases {
@@ -68,7 +68,7 @@ fn test_nan_handling_in_feature_map() {
     });
 
     let mut kfm = KernelFeatureMap::new();
-    kfm.fit(&data);
+    kfm.fit(&data.as_ref());
 
     // Test transform_row with a NaN value
     // Verify that the transformer correctly masks NaNs by outputting a zero vector.

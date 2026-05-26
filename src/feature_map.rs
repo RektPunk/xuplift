@@ -1,4 +1,4 @@
-use faer::{Col, Mat};
+use faer::{Col, Mat, MatRef};
 use rand::rng;
 use rand::seq::SliceRandom;
 use rayon::prelude::*;
@@ -48,7 +48,7 @@ impl KernelFeatureMap {
     }
 
     /// Fits the transformer to the input data X.
-    pub fn fit(&mut self, x: &Mat<f32>) {
+    pub fn fit(&mut self, x: &MatRef<f32>) {
         let num_rows = x.nrows();
         self.num_features = x.ncols();
 
@@ -226,7 +226,7 @@ impl KernelFeatureMap {
     /// Transforms an entire row into the kernel feature space.
     ///
     /// Concatenates the transformed features: $Z = [Z_1, Z_2, \dots, Z_d]$.
-    pub fn transform_row(&self, x: &Mat<f32>, row_idx: usize) -> Col<f32> {
+    pub fn transform_row(&self, x: &MatRef<f32>, row_idx: usize) -> Col<f32> {
         let total_dim = self.num_features * self.num_bases;
         let mut z_row = Col::<f32>::zeros(total_dim);
         for f_idx in 0..self.num_features {
@@ -243,7 +243,7 @@ impl KernelFeatureMap {
     /// Transforms a new input matrix X into the learned Nystrom feature space.
     ///
     /// Returns a vector of matrices, one for each feature.
-    pub fn transform(&self, x: &Mat<f32>) -> Vec<Mat<f32>> {
+    pub fn transform(&self, x: &MatRef<f32>) -> Vec<Mat<f32>> {
         let n_samples = x.nrows();
         let n_features = x.ncols();
         (0..n_features)
