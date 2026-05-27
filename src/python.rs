@@ -1,5 +1,5 @@
-use faer::{Col, ColRef, Mat, MatRef};
-use numpy::ndarray::{Array1, Array2};
+use faer::{ColRef, MatRef};
+use numpy::ndarray::{ArrayView1, ArrayView2, ShapeBuilder};
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
@@ -12,38 +12,81 @@ pub use crate::metalearners::slearner::SLearner;
 pub use crate::metalearners::tlearner::TLearner;
 pub use crate::metalearners::xlearner::XLearner;
 
-fn convert_to_faer_mat(x: PyReadonlyArray2<'_, f32>) -> MatRef<'_, f32> {
-    let raw_arr = x.as_raw_array();
-    let nrows = raw_arr.nrows();
-    let ncols = raw_arr.ncols();
-    let strides: [isize; 2] = raw_arr.strides().try_into().unwrap();
-    unsafe { MatRef::from_raw_parts(raw_arr.as_ptr(), nrows, ncols, strides[0], strides[1]) }
+/// Converts `numpy` views into `faer` reference types.
+pub trait IntoFaer {
+    type Faer;
+    fn into_faer(self) -> Self::Faer;
 }
 
-fn convert_to_faer_col(x: PyReadonlyArray1<'_, f32>) -> ColRef<'_, f32> {
-    let raw_arr = x.as_raw_array();
-    let nrows = raw_arr.len();
-    let strides: [isize; 1] = raw_arr.strides().try_into().unwrap();
-    unsafe { ColRef::from_raw_parts(raw_arr.as_ptr(), nrows, strides[0]) }
+/// Converts `faer` types into `ndarray` views.
+pub trait IntoNdarray {
+    type Ndarray;
+    fn into_ndarray(self) -> Self::Ndarray;
 }
 
-fn convert_to_numpy_mat(x: Mat<f32>) -> Array2<f32> {
-    Array2::from_shape_fn((x.nrows(), x.ncols()), |(i, j)| x[(i, j)])
+// Implementations for `numpy` -> `faer` conversions
+impl<'a, T: numpy::Element + 'a> IntoFaer for PyReadonlyArray2<'a, T> {
+    type Faer = MatRef<'a, T>;
+
+    /// Converts a `PyReadonlyArray2` into a `faer::MatRef`.
+    fn into_faer(self) -> Self::Faer {
+        let raw_arr = self.as_raw_array();
+        let nrows = raw_arr.nrows();
+        let ncols = raw_arr.ncols();
+        let strides: [isize; 2] = raw_arr.strides().try_into().unwrap();
+        unsafe { MatRef::from_raw_parts(raw_arr.as_ptr(), nrows, ncols, strides[0], strides[1]) }
+    }
 }
 
-fn convert_to_numpy_col(x: Col<f32>) -> Array1<f32> {
-    Array1::from_iter(x.iter().copied())
+impl<'a, T: numpy::Element + 'a> IntoFaer for PyReadonlyArray1<'a, T> {
+    type Faer = ColRef<'a, T>;
+
+    /// Converts a `PyReadonlyArray1` into a `faer::ColRef`.
+    fn into_faer(self) -> Self::Faer {
+        let raw_arr = self.as_raw_array();
+        let nrows = raw_arr.len();
+        let strides: [isize; 1] = raw_arr.strides().try_into().unwrap();
+        unsafe { ColRef::from_raw_parts(raw_arr.as_ptr(), nrows, strides[0]) }
+    }
 }
 
+// Implementations for `faer` -> `numpy` conversions
+impl<'a, T> IntoNdarray for MatRef<'a, T> {
+    type Ndarray = ArrayView2<'a, T>;
+
+    /// Converts a `faer::MatRef` into an `ndarray::ArrayView2`.
+    fn into_ndarray(self) -> Self::Ndarray {
+        let nrows = self.nrows();
+        let ncols = self.ncols();
+        let row_stride = self.row_stride() as usize;
+        let col_stride = self.col_stride() as usize;
+        unsafe {
+            ArrayView2::from_shape_ptr(
+                (nrows, ncols).strides((row_stride, col_stride)),
+                self.as_ptr(),
+            )
+        }
+    }
+}
+
+impl<'a, T> IntoNdarray for ColRef<'a, T> {
+    type Ndarray = ArrayView1<'a, T>;
+
+    /// Converts a `faer::ColRef` into an `ndarray::ArrayView1`.
+    fn into_ndarray(self) -> Self::Ndarray {
+        let nrows = self.nrows();
+        let row_stride = self.row_stride() as usize;
+        unsafe { ArrayView1::from_shape_ptr(nrows.strides(row_stride), self.as_ptr()) }
+    }
+}
+
+/// Helper function to prepare multiple inputs (X, T, Y) from Python into `faer` types.
 fn prepare_input<'a>(
     x: PyReadonlyArray2<'a, f32>,
     t: PyReadonlyArray1<'a, f32>,
     y: PyReadonlyArray1<'a, f32>,
 ) -> (MatRef<'a, f32>, ColRef<'a, f32>, ColRef<'a, f32>) {
-    let x_mat = convert_to_faer_mat(x);
-    let t_col = convert_to_faer_col(t);
-    let y_col = convert_to_faer_col(y);
-    (x_mat, t_col, y_col)
+    (x.into_faer(), t.into_faer(), y.into_faer())
 }
 
 #[pyclass(name = "Classifier")]
@@ -59,9 +102,7 @@ impl PyClassifier {
     }
 
     fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
-        let x_mat = convert_to_faer_mat(x);
-        let y_col = convert_to_faer_col(y);
-        self.inner.fit(x_mat, y_col);
+        self.inner.fit(x.into_faer(), y.into_faer());
     }
 
     fn predict<'py>(
@@ -69,9 +110,8 @@ impl PyClassifier {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let pred = self.inner.predict(x_mat);
-        let py_pred = convert_to_numpy_col(pred).to_pyarray(py);
+        let pred = self.inner.predict(x.into_faer());
+        let py_pred = pred.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_pred)
     }
 
@@ -80,9 +120,8 @@ impl PyClassifier {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain(x_mat);
-        let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
+        let explanation = self.inner.explain(x.into_faer());
+        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_expl)
     }
 }
@@ -100,9 +139,7 @@ impl PyRegressor {
     }
 
     fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
-        let x_mat = convert_to_faer_mat(x);
-        let y_col = convert_to_faer_col(y);
-        self.inner.fit(x_mat, y_col);
+        self.inner.fit(x.into_faer(), y.into_faer());
     }
 
     fn predict<'py>(
@@ -110,9 +147,8 @@ impl PyRegressor {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let pred = self.inner.predict(x_mat);
-        let py_pred = convert_to_numpy_col(pred).to_pyarray(py);
+        let pred = self.inner.predict(x.into_faer());
+        let py_pred = pred.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_pred)
     }
 
@@ -121,9 +157,8 @@ impl PyRegressor {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain(x_mat);
-        let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
+        let explanation = self.inner.explain(x.into_faer());
+        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_expl)
     }
 }
@@ -162,9 +197,8 @@ impl PyRLearner {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let uplift = self.inner.predict_uplift(x_mat);
-        let py_pred = convert_to_numpy_col(uplift).to_pyarray(py);
+        let uplift = self.inner.predict_uplift(x.into_faer());
+        let py_pred = uplift.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_pred)
     }
 
@@ -173,9 +207,8 @@ impl PyRLearner {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain_uplift(x_mat);
-        let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
+        let explanation = self.inner.explain_uplift(x.into_faer());
+        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_expl)
     }
 }
@@ -203,9 +236,8 @@ impl PySLearner {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let uplift = self.inner.predict_uplift(x_mat);
-        let py_pred = convert_to_numpy_col(uplift).to_pyarray(py);
+        let uplift = self.inner.predict_uplift(x.into_faer());
+        let py_pred = uplift.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_pred)
     }
 
@@ -214,9 +246,8 @@ impl PySLearner {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain_uplift(x_mat);
-        let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
+        let explanation = self.inner.explain_uplift(x.into_faer());
+        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_expl)
     }
 }
@@ -244,9 +275,8 @@ impl PyTLearner {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let uplift = self.inner.predict_uplift(x_mat);
-        let py_pred = convert_to_numpy_col(uplift).to_pyarray(py);
+        let uplift = self.inner.predict_uplift(x.into_faer());
+        let py_pred = uplift.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_pred)
     }
 
@@ -255,9 +285,8 @@ impl PyTLearner {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain_uplift(x_mat);
-        let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
+        let explanation = self.inner.explain_uplift(x.into_faer());
+        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_expl)
     }
 }
@@ -296,9 +325,8 @@ impl PyXLearner {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let uplift = self.inner.predict_uplift(x_mat);
-        let py_pred = convert_to_numpy_col(uplift).to_pyarray(py);
+        let uplift = self.inner.predict_uplift(x.into_faer());
+        let py_pred = uplift.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_pred)
     }
 
@@ -307,9 +335,8 @@ impl PyXLearner {
         py: Python<'py>,
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain_uplift(x_mat);
-        let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
+        let explanation = self.inner.explain_uplift(x.into_faer());
+        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_expl)
     }
 }
