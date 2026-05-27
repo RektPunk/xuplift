@@ -38,9 +38,7 @@ impl SLearner {
             .copy_from(x);
 
         // Append the treatment vector T as the final column
-        for i in 0..num_rows {
-            x_combined[(i, num_cols)] = t[i];
-        }
+        x_combined.as_mut().col_mut(num_cols).copy_from(t);
 
         // Initialize and fit the Regressor using the augmented features
         let mut mu = Regressor::new(mu_penalty);

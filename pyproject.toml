@@ -1,6 +1,6 @@
 [project]
 name = "xuplift"
-version = "0.1.0"
+version = "0.1.1"
 description = "Explainable uplift modeling via linearized kernel feature maps."
 authors = [
     {name = "RektPunk", email = "rektpunk@gmail.com"},
