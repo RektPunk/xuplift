@@ -199,7 +199,7 @@ impl Classifier {
             let n_chunk = end_row - start_row;
             let x_chunk = x.subrows(start_row, n_chunk);
 
-            let z_matrices = map.transform_split_features(x_chunk);
+            let z_matrices = map.transform_per_feature(x_chunk);
 
             let chunk_pred = (0..num_features)
                 .into_par_iter()
@@ -248,7 +248,7 @@ impl Classifier {
             let n_chunk = end_row - start_row;
             let x_chunk = x.subrows(start_row, n_chunk);
 
-            let z_matrices = map.transform_split_features(x_chunk);
+            let z_matrices = map.transform_per_feature(x_chunk);
 
             let chunk_contributions: Vec<Col<f32>> = (0..num_features)
                 .into_par_iter()

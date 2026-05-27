@@ -196,11 +196,12 @@ impl KernelFeatureMap {
         }
     }
 
-    /// Transforms an entire row into the kernel feature space and writes it to a mutable Column view.
+    /// Transforms an entire row into the joint kernel feature space by concatenating all mapped features.
     ///
-    /// It computes the mapped feature $z_l$ for each landmark $j$:
-    /// $$z_l = \left( \sum_{j=1}^m k(x, u_j) P_{jl} \right) - \mu_l$$
-    /// where $k$ is the RBF kernel, $P$ is the projection matrix, and $\mu$ is the centering mean.
+    /// For a given sample row $x$, it computes the mapped feature for each feature $f$ and landmark $l$,
+    /// and stores it at the corresponding layout offset $f \cdot m + l$:
+    /// $$\text{out}[f \cdot m + l] = \left( \sum_{j=1}^m k(x_f, u_{f, j}) P_{f, jl} \right) - \mu_{f, l}$$
+    /// where $m$ is `num_bases`, $k$ is the RBF kernel, $P_f$ is the projection matrix, and $\mu_f$ is the centering mean.
     pub fn transform_row_into(&self, x: MatRef<'_, f32>, row_idx: usize, mut out: ColMut<'_, f32>) {
         // Temporary buffer on the stack to store intermediate kernel calculations.
         // Capped at 64 as per the Nystrom landmark selection logic.
@@ -240,10 +241,12 @@ impl KernelFeatureMap {
         }
     }
 
-    /// Transforms a new input matrix X into the learned Nystrom feature space.
+    /// Transforms the input matrix $X$ into separate Nystrom feature spaces for each feature.
     ///
-    /// Returns a vector of matrices, one for each feature.
-    pub fn transform_split_features(&self, x: MatRef<'_, f32>) -> Vec<Mat<f32>> {
+    /// Returns a vector of matrices $[Z_1, Z_2, \dots, Z_d]$,
+    /// where each matrix $Z_f$ has a shape of `(n_samples, num_bases)`
+    /// representing the kernel mapped space of the $f$-th feature.
+    pub fn transform_per_feature(&self, x: MatRef<'_, f32>) -> Vec<Mat<f32>> {
         let n_samples = x.nrows();
         let n_features = x.ncols();
         (0..n_features)

@@ -23,7 +23,7 @@ fn test_transform_batch() {
     let mut kfm = KernelFeatureMap::new();
     kfm.fit(data.as_ref());
 
-    let transformed = kfm.transform_split_features(data.as_ref());
+    let transformed = kfm.transform_per_feature(data.as_ref());
     assert_eq!(transformed.len(), 2);
     assert_eq!(transformed[0].nrows(), 5);
     assert_eq!(transformed[0].ncols(), kfm.num_bases);
@@ -36,7 +36,7 @@ fn test_transform_row_matches_transform_batch() {
     let mut kfm = KernelFeatureMap::new();
     kfm.fit(data.as_ref());
 
-    let transformed_batch = kfm.transform_split_features(data.as_ref());
+    let transformed_batch = kfm.transform_per_feature(data.as_ref());
     for row_idx in 0..5 {
         let total_dim = kfm.num_features * kfm.num_bases;
         let mut transformed_row = Col::<f32>::zeros(total_dim);
