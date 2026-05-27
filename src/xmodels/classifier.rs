@@ -90,11 +90,11 @@ impl Classifier {
                         (
                             Mat::<f32>::zeros(total_dim, total_dim),
                             Col::<f32>::zeros(total_dim),
-                            0.0,
+                            Col::<f32>::zeros(total_dim),
                         )
                     },
-                    |(mut acc_h, mut acc_g, acc_mag), r| {
-                        let z_r = map.transform_row(x, r);
+                    |(mut acc_h, mut acc_g, mut z_r), r| {
+                        map.transform_row_to_slice(x, r, z_r.as_mut());
 
                         // Linear prediction: raw_pred = z^T * w + base_value
                         let mut raw_pred = base_val;
@@ -114,7 +114,7 @@ impl Classifier {
                                 acc_h[(k, l)] += val_k * z_r[l];
                             }
                         }
-                        (acc_h, acc_g, acc_mag)
+                        (acc_h, acc_g, z_r)
                     },
                 )
                 .reduce(
@@ -122,17 +122,17 @@ impl Classifier {
                         (
                             Mat::<f32>::zeros(total_dim, total_dim),
                             Col::<f32>::zeros(total_dim),
-                            0.0,
+                            Col::<f32>::zeros(0),
                         )
                     },
-                    |(mut h1, mut g1, m1), (h2, g2, m2)| {
+                    |(mut h1, mut g1, _), (h2, g2, _)| {
                         for j in 0..total_dim {
                             g1[j] += g2[j];
                             for i in 0..total_dim {
                                 h1[(i, j)] += h2[(i, j)];
                             }
                         }
-                        (h1, g1, m1 + m2)
+                        (h1, g1, Col::<f32>::zeros(0))
                     },
                 );
 

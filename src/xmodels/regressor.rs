@@ -81,23 +81,23 @@ impl Regressor {
             y.iter().sum::<f32>() / num_rows as f32
         };
 
-        let y_centered = y - Col::<f32>::full(num_rows, self.base_value);
         let total_dim = num_features * num_bases;
 
         // Accumulate Hessian and Gradient in parallel using a streaming approach.
-        let (mut ridge_lhs, rhs) = (0..num_rows)
+        let (mut ridge_lhs, rhs, _) = (0..num_rows)
             .into_par_iter()
             .fold(
                 || {
                     (
                         Mat::<f32>::zeros(total_dim, total_dim),
                         Col::<f32>::zeros(total_dim),
+                        Col::<f32>::zeros(total_dim),
                     )
                 },
-                |(mut acc_h, mut acc_g), r| {
-                    let z_r = map.transform_row(x, r);
+                |(mut acc_h, mut acc_g, mut z_r), r| {
+                    map.transform_row_to_slice(x, r, z_r.as_mut());
                     let w = weights[r];
-                    let y_c = y_centered[r];
+                    let y_c = y[r] - self.base_value;
 
                     for i in 0..total_dim {
                         let z_i = z_r[i];
@@ -107,7 +107,7 @@ impl Regressor {
                             acc_h[(i, j)] += val_i * z_r[j];
                         }
                     }
-                    (acc_h, acc_g)
+                    (acc_h, acc_g, z_r)
                 },
             )
             .reduce(
@@ -115,16 +115,17 @@ impl Regressor {
                     (
                         Mat::<f32>::zeros(total_dim, total_dim),
                         Col::<f32>::zeros(total_dim),
+                        Col::<f32>::zeros(0),
                     )
                 },
-                |(mut h1, mut g1), (h2, g2)| {
+                |(mut h1, mut g1, _), (h2, g2, _)| {
                     for j in 0..total_dim {
                         g1[j] += g2[j];
                         for i in 0..total_dim {
                             h1[(i, j)] += h2[(i, j)];
                         }
                     }
-                    (h1, g1)
+                    (h1, g1, Col::<f32>::zeros(0))
                 },
             );
 
