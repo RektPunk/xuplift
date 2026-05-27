@@ -3,9 +3,19 @@ name: Python CI
 on:
   pull_request:
     types: [opened, reopened, synchronize]
+    paths:
+      - "python/**/*.py"
+      - "src/**/*.rs"
+      - "pyproject.toml"
+      - "uv.lock"
   push:
     branches:
       - main
+    paths:
+      - "python/**/*.py"
+      - "src/**/*.rs"
+      - "pyproject.toml"
+      - "uv.lock"
 
 jobs:
   run-pytest:

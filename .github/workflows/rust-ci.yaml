@@ -3,9 +3,19 @@ name: Rust CI
 on:
   pull_request:
     types: [opened, reopened, synchronize]
+    paths:
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
   push:
     branches:
       - main
+    paths:
+      - "src/**/*.rs"
+      - "tests/**/*.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
 
 env:
   CARGO_TERM_COLOR: always
