@@ -61,7 +61,7 @@ impl PyClassifier {
     fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
         let x_mat = convert_to_faer_mat(x);
         let y_col = convert_to_faer_col(y);
-        self.inner.fit(&x_mat, &y_col);
+        self.inner.fit(x_mat, y_col);
     }
 
     fn predict<'py>(
@@ -70,7 +70,7 @@ impl PyClassifier {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let pred = self.inner.predict(&x_mat);
+        let pred = self.inner.predict(x_mat);
         let py_pred = convert_to_numpy_col(pred).to_pyarray(py);
         Ok(py_pred)
     }
@@ -81,7 +81,7 @@ impl PyClassifier {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain(&x_mat);
+        let explanation = self.inner.explain(x_mat);
         let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
         Ok(py_expl)
     }
@@ -102,7 +102,7 @@ impl PyRegressor {
     fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
         let x_mat = convert_to_faer_mat(x);
         let y_col = convert_to_faer_col(y);
-        self.inner.fit(&x_mat, &y_col);
+        self.inner.fit(x_mat, y_col);
     }
 
     fn predict<'py>(
@@ -111,7 +111,7 @@ impl PyRegressor {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let pred = self.inner.predict(&x_mat);
+        let pred = self.inner.predict(x_mat);
         let py_pred = convert_to_numpy_col(pred).to_pyarray(py);
         Ok(py_pred)
     }
@@ -122,7 +122,7 @@ impl PyRegressor {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain(&x_mat);
+        let explanation = self.inner.explain(x_mat);
         let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
         Ok(py_expl)
     }
@@ -146,9 +146,9 @@ impl PyRLearner {
     ) -> Self {
         let (x_mat, t_col, y_col) = prepare_input(x, t, y);
         let model = RLearner::new(
-            &x_mat,
-            &t_col,
-            &y_col,
+            x_mat,
+            t_col,
+            y_col,
             mu_penalty,
             p_penalty,
             p_max_iter,
@@ -163,7 +163,7 @@ impl PyRLearner {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let uplift = self.inner.predict_uplift(&x_mat);
+        let uplift = self.inner.predict_uplift(x_mat);
         let py_pred = convert_to_numpy_col(uplift).to_pyarray(py);
         Ok(py_pred)
     }
@@ -174,7 +174,7 @@ impl PyRLearner {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain_uplift(&x_mat);
+        let explanation = self.inner.explain_uplift(x_mat);
         let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
         Ok(py_expl)
     }
@@ -194,7 +194,7 @@ impl PySLearner {
         mu_penalty: f32,
     ) -> Self {
         let (x_mat, t_col, y_col) = prepare_input(x, t, y);
-        let model = SLearner::new(&x_mat, &t_col, &y_col, mu_penalty);
+        let model = SLearner::new(x_mat, t_col, y_col, mu_penalty);
         PySLearner { inner: model }
     }
 
@@ -204,7 +204,7 @@ impl PySLearner {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let uplift = self.inner.predict_uplift(&x_mat);
+        let uplift = self.inner.predict_uplift(x_mat);
         let py_pred = convert_to_numpy_col(uplift).to_pyarray(py);
         Ok(py_pred)
     }
@@ -215,7 +215,7 @@ impl PySLearner {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain_uplift(&x_mat);
+        let explanation = self.inner.explain_uplift(x_mat);
         let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
         Ok(py_expl)
     }
@@ -235,7 +235,7 @@ impl PyTLearner {
         mu_penalty: f32,
     ) -> Self {
         let (x_mat, t_col, y_col) = prepare_input(x, t, y);
-        let model = TLearner::new(&x_mat, &t_col, &y_col, mu_penalty);
+        let model = TLearner::new(x_mat, t_col, y_col, mu_penalty);
         PyTLearner { inner: model }
     }
 
@@ -245,7 +245,7 @@ impl PyTLearner {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let uplift = self.inner.predict_uplift(&x_mat);
+        let uplift = self.inner.predict_uplift(x_mat);
         let py_pred = convert_to_numpy_col(uplift).to_pyarray(py);
         Ok(py_pred)
     }
@@ -256,7 +256,7 @@ impl PyTLearner {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain_uplift(&x_mat);
+        let explanation = self.inner.explain_uplift(x_mat);
         let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
         Ok(py_expl)
     }
@@ -280,9 +280,9 @@ impl PyXLearner {
     ) -> Self {
         let (x_mat, t_col, y_col) = prepare_input(x, t, y);
         let model = XLearner::new(
-            &x_mat,
-            &t_col,
-            &y_col,
+            x_mat,
+            t_col,
+            y_col,
             mu_penalty,
             p_penalty,
             p_max_iter,
@@ -297,7 +297,7 @@ impl PyXLearner {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray1<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let uplift = self.inner.predict_uplift(&x_mat);
+        let uplift = self.inner.predict_uplift(x_mat);
         let py_pred = convert_to_numpy_col(uplift).to_pyarray(py);
         Ok(py_pred)
     }
@@ -308,7 +308,7 @@ impl PyXLearner {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
         let x_mat = convert_to_faer_mat(x);
-        let explanation = self.inner.explain_uplift(&x_mat);
+        let explanation = self.inner.explain_uplift(x_mat);
         let py_expl = convert_to_numpy_mat(explanation).to_pyarray(py);
         Ok(py_expl)
     }

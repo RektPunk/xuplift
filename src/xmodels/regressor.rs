@@ -37,7 +37,7 @@ impl Regressor {
     /// Fits the model using Global Ridge Regression.
     ///
     /// This method solves the system: $(Z^T Z + \lambda I) \alpha = Z^T (y - b)$
-    pub fn fit(&mut self, x: &MatRef<f32>, y: &ColRef<f32>) {
+    pub fn fit(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>) {
         let weights = Col::<f32>::full(x.nrows(), 1.0);
         self.fit_weighted(x, y, &weights);
     }
@@ -48,7 +48,7 @@ impl Regressor {
     /// where $W$ is a diagonal weight matrix.
     ///
     /// The system is solved efficiently using LDLT decomposition of the Hessian.
-    pub fn fit_weighted(&mut self, x: &MatRef<f32>, y: &ColRef<f32>, weights: &Col<f32>) {
+    pub fn fit_weighted(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>, weights: &Col<f32>) {
         // Initialize and fit the kernel map if it hasn't been set yet
         let mut map = KernelFeatureMap::new();
         map.fit(x);
@@ -150,7 +150,7 @@ impl Regressor {
     /// Predicts target values for the given input matrix X.
     ///
     /// The prediction is: $\hat{y} = Z \alpha + b = \sum_{j} (Z_j \alpha_j) + b$.
-    pub fn predict(&self, x: &MatRef<f32>) -> Col<f32> {
+    pub fn predict(&self, x: MatRef<'_, f32>) -> Col<f32> {
         let map = self
             .kernel_feature_map
             .as_ref()
@@ -173,10 +173,10 @@ impl Regressor {
         for start_row in (0..num_rows).step_by(chunk_size) {
             let end_row = (start_row + chunk_size).min(num_rows);
             let n_chunk = end_row - start_row;
-            let x_chunk = x.as_ref().subrows(start_row, n_chunk);
+            let x_chunk = x.subrows(start_row, n_chunk);
 
             // Map raw input to the feature space for this chunk
-            let z_matrices = map.transform(&x_chunk);
+            let z_matrices = map.transform(x_chunk);
 
             // Parallel computation for the chunk: y_pred = Sum(Z_i * coeff_i)
             let chunk_pred = (0..num_features)
@@ -201,7 +201,7 @@ impl Regressor {
     ///
     /// For each feature $i$, it calculates the contribution $C_i = Z_i \cdot \alpha_i$,
     /// such that $\sum C_i + b = \hat{y}$.
-    pub fn explain(&self, x: &MatRef<f32>) -> Mat<f32> {
+    pub fn explain(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         let map = self
             .kernel_feature_map
             .as_ref()
@@ -224,9 +224,9 @@ impl Regressor {
         for start_row in (0..num_rows).step_by(chunk_size) {
             let end_row = (start_row + chunk_size).min(num_rows);
             let n_chunk = end_row - start_row;
-            let x_chunk = x.as_ref().subrows(start_row, n_chunk);
+            let x_chunk = x.subrows(start_row, n_chunk);
 
-            let z_matrices = map.transform(&x_chunk);
+            let z_matrices = map.transform(x_chunk);
 
             let chunk_contributions: Vec<Col<f32>> = (0..num_features)
                 .into_par_iter()

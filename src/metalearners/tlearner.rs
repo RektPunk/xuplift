@@ -24,7 +24,12 @@ impl TLearner {
     /// * `t` - The treatment assignment vector (0 or 1).
     /// * `y` - The observed outcome vector.
     /// * `mu_penalty` - The regularization penalty for the regressor.
-    pub fn new(x: &MatRef<f32>, t: &ColRef<f32>, y: &ColRef<f32>, mu_penalty: f32) -> Self {
+    pub fn new(
+        x: MatRef<'_, f32>,
+        t: ColRef<'_, f32>,
+        y: ColRef<'_, f32>,
+        mu_penalty: f32,
+    ) -> Self {
         let num_rows = x.nrows();
 
         // Create weights for T=1 and T=0
@@ -49,7 +54,7 @@ impl TLearner {
     }
 
     /// Estimates the uplift score: $\tau(x) = \hat{\mu}_1(x) - \hat{\mu}_0(x)$
-    pub fn predict_uplift(&self, x: &MatRef<f32>) -> Col<f32> {
+    pub fn predict_uplift(&self, x: MatRef<'_, f32>) -> Col<f32> {
         let (pred_t1, pred_t0) = rayon::join(|| self.mu_t1.predict(x), || self.mu_t0.predict(x));
         pred_t1 - pred_t0
     }
@@ -62,7 +67,7 @@ impl TLearner {
     ///
     /// # Returns
     /// A matrix (n_samples x n_features) representing the incremental contribution of each feature.
-    pub fn explain_uplift(&self, x: &MatRef<f32>) -> Mat<f32> {
+    pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         let (exp_t1, exp_t0) = rayon::join(|| self.mu_t1.explain(x), || self.mu_t0.explain(x));
         exp_t1 - exp_t0
     }

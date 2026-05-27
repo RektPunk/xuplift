@@ -33,10 +33,10 @@ fn test_rlearner() {
     }
 
     // R-Learner trains: m(x) [Outcome], e(x) [Propensity], and tau(x) [Residual-on-Residual]
-    let rlearner = RLearner::new(&x.as_ref(), &t.as_ref(), &y.as_ref(), 0.1, 0.1, 20, 0.1);
+    let rlearner = RLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
 
     // Estimate Individual Treatment Effect (ITE).
-    let uplift_estimate = rlearner.predict_uplift(&x.as_ref());
+    let uplift_estimate = rlearner.predict_uplift(x.as_ref());
 
     // Verify if the average estimated uplift is close to the true effect.
     let mut sum_uplift = 0.0;
@@ -59,7 +59,7 @@ fn test_rlearner() {
     // Verify Mathematical Explanation Consistency
     // For R-Learner, the explanation logic is simpler because it's a single Stage-2 model.
     // Predict(x) should be approximately (sum of feature contributions + base_value).
-    let uplift_explanation = rlearner.explain_uplift(&x.as_ref());
+    let uplift_explanation = rlearner.explain_uplift(x.as_ref());
 
     for i in 0..x.nrows() {
         let mut explained_total = 0.0;

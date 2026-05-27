@@ -29,11 +29,11 @@ fn test_regression() {
     // Setup and Fit Regressor
     // Initialize the Regressor and solve for coefficients.
     let mut model = Regressor::new(penalty);
-    model.fit(&x.as_ref(), &y.as_ref());
+    model.fit(x.as_ref(), y.as_ref());
 
     // Verify Prediction Accuracy (MAE)
     // Expect the Mean Absolute Error (MAE) to be low.
-    let preds = model.predict(&x.as_ref());
+    let preds = model.predict(x.as_ref());
     let mut total_error = 0.0;
     for i in 0..n_samples {
         total_error += (preds[i] - y[i]).abs();
@@ -45,7 +45,7 @@ fn test_regression() {
     // Verify Explanation Consistency
     // The sum of individual feature contributions plus the model's base value (intercept)
     // must exactly equal the final predicted value for every sample.
-    let explanation = model.explain(&x.as_ref());
+    let explanation = model.explain(x.as_ref());
 
     // Verify dimensions: rows must match samples, columns must match input features.
     assert_eq!(explanation.nrows(), n_samples, "Rows mismatch");
@@ -94,10 +94,10 @@ fn test_regression_with_nans() {
     }
 
     let mut model = Regressor::new(0.01);
-    model.fit(&x.as_ref(), &y.as_ref());
+    model.fit(x.as_ref(), y.as_ref());
 
     // Check if predictions for NaN rows are still returning values
-    let preds = model.predict(&x.as_ref());
+    let preds = model.predict(x.as_ref());
     for i in 0..n_samples {
         assert!(
             !preds[i].is_nan(),

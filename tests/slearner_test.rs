@@ -31,10 +31,10 @@ fn test_slearner() {
     }
 
     // Initialize SLearner which internally handles feature augmentation and kernel mapping.
-    let slearner = SLearner::new(&x.as_ref(), &t.as_ref(), &y.as_ref(), 0.01);
+    let slearner = SLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.01);
 
     // Estimate Individual Treatment Effect (ITE).
-    let uplift_estimate = slearner.predict_uplift(&x.as_ref());
+    let uplift_estimate = slearner.predict_uplift(x.as_ref());
 
     // Verify if the average estimated uplift is close to the true effect.
     let mut sum_uplift = 0.0;
@@ -57,7 +57,7 @@ fn test_slearner() {
     // Verify Mathematical Explanation Consistency
     // Verify that the sum of feature contribution deltas matches the predicted uplift.
     // Mathematical Consistency: \sum(Contribution_T1 - Contribution_T0) == Predict_T1 - Predict_T0
-    let uplift_explanation = slearner.explain_uplift(&x.as_ref());
+    let uplift_explanation = slearner.explain_uplift(x.as_ref());
     for i in 0..x.nrows() {
         let mut explained_total = 0.0;
         for j in 0..uplift_explanation.ncols() {

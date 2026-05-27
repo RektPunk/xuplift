@@ -38,10 +38,10 @@ fn test_gaussian_classification() {
 
     // Setup and Fit Classifier (IRLS)
     let mut model = Classifier::new(penalty, 20); // Perform 20 iterations for convergence
-    model.fit(&x.as_ref(), &y.as_ref());
+    model.fit(x.as_ref(), y.as_ref());
 
     // Verify Accuracy
-    let probs = model.predict(&x.as_ref());
+    let probs = model.predict(x.as_ref());
     let mut correct = 0;
     for i in 0..n_samples {
         let pred = if probs[i] > 0.5 { 1.0 } else { 0.0 };
@@ -58,7 +58,7 @@ fn test_gaussian_classification() {
 
     // Verify Explanation Consistency:
     // Sigmoid(Sum(Contributions) + Base_Value) == Predicted_Probability
-    let explanation = model.explain(&x.as_ref());
+    let explanation = model.explain(x.as_ref());
 
     for i in 0..n_samples {
         // Sum of logit-scale contributions for each feature
@@ -103,10 +103,10 @@ fn test_classifier_with_nans() {
     }
 
     let mut model = Classifier::new(0.01, 5);
-    model.fit(&x.as_ref(), &y.as_ref());
+    model.fit(x.as_ref(), y.as_ref());
 
     // Check if predictions for NaN rows are still returning values
-    let probs = model.predict(&x.as_ref());
+    let probs = model.predict(x.as_ref());
     for i in 0..n_samples {
         assert!(
             !probs[i].is_nan(),
