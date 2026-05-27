@@ -201,12 +201,7 @@ impl KernelFeatureMap {
     /// It computes the mapped feature $z_l$ for each landmark $j$:
     /// $$z_l = \left( \sum_{j=1}^m k(x, u_j) P_{jl} \right) - \mu_l$$
     /// where $k$ is the RBF kernel, $P$ is the projection matrix, and $\mu$ is the centering mean.
-    pub fn transform_row_to_slice(
-        &self,
-        x: MatRef<'_, f32>,
-        row_idx: usize,
-        mut out: ColMut<'_, f32>,
-    ) {
+    pub fn transform_row_into(&self, x: MatRef<'_, f32>, row_idx: usize, mut out: ColMut<'_, f32>) {
         // Temporary buffer on the stack to store intermediate kernel calculations.
         // Capped at 64 as per the Nystrom landmark selection logic.
         let mut kernel_cache = [0.0f32; 64];
@@ -245,26 +240,16 @@ impl KernelFeatureMap {
         }
     }
 
-    /// Transforms an entire row into the kernel feature space.
-    ///
-    /// Returns a new `Col` containing the concatenated kernel features: $Z = [Z_1, Z_2, \dots, Z_d]$.
-    pub fn transform_row(&self, x: MatRef<'_, f32>, row_idx: usize) -> Col<f32> {
-        let total_dim = self.num_features * self.num_bases;
-        let mut z_row = Col::<f32>::zeros(total_dim);
-        self.transform_row_to_slice(x, row_idx, z_row.as_mut());
-        z_row
-    }
-
     /// Transforms a new input matrix X into the learned Nystrom feature space.
     ///
     /// Returns a vector of matrices, one for each feature.
-    pub fn transform(&self, x: MatRef<'_, f32>) -> Vec<Mat<f32>> {
+    pub fn transform_split_features(&self, x: MatRef<'_, f32>) -> Vec<Mat<f32>> {
         let n_samples = x.nrows();
         let n_features = x.ncols();
         (0..n_features)
             .into_par_iter()
             .map(|f_idx| {
-                let mut k_batch = Mat::<f32>::zeros(n_samples, self.num_bases);
+                let mut z_batch = Mat::<f32>::zeros(n_samples, self.num_bases);
                 let bases = &self.feature_bases[f_idx];
                 let proj = &self.proj_matrices[f_idx];
                 let mean = &self.feature_means[f_idx];
@@ -272,26 +257,33 @@ impl KernelFeatureMap {
 
                 for i in 0..n_samples {
                     let x_val = x[(i, f_idx)];
-                    if !x_val.is_nan() {
+
+                    // Handle missing values.
+                    if x_val.is_nan() {
+                        continue;
+                    }
+
+                    // Temporary buffer on the stack to store intermediate kernel calculations.
+                    // Capped at 64 as per the Nystrom landmark selection logic.
+                    let mut kernel_cache = [0.0f32; 64];
+
+                    // Pre-calculate RBF kernel distances between input and landmarks
+                    for j in 0..self.num_bases {
+                        let diff = x_val - bases[j];
+                        kernel_cache[j] = (-(diff * diff) * s2_inv).exp();
+                    }
+
+                    // Map into the learned Nystrom feature space via linear projection and centering
+                    let mut row_slice = z_batch.as_mut().row_mut(i);
+                    for l in 0..self.num_bases {
+                        let mut projection_sum = 0.0;
                         for j in 0..self.num_bases {
-                            let diff = x_val - bases[j];
-                            k_batch[(i, j)] = (-(diff * diff) * s2_inv).exp();
+                            projection_sum += kernel_cache[j] * proj[(j, l)];
                         }
+                        row_slice[l] = projection_sum - mean[l];
                     }
                 }
 
-                let mut z_batch = k_batch * proj;
-                for i in 0..n_samples {
-                    if x[(i, f_idx)].is_nan() {
-                        for j in 0..self.num_bases {
-                            z_batch[(i, j)] = 0.0;
-                        }
-                    } else {
-                        for j in 0..self.num_bases {
-                            z_batch[(i, j)] -= mean[j];
-                        }
-                    }
-                }
                 z_batch
             })
             .collect()

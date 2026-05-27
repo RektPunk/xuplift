@@ -95,7 +95,7 @@ impl Regressor {
                     )
                 },
                 |(mut acc_h, mut acc_g, mut z_r), r| {
-                    map.transform_row_to_slice(x, r, z_r.as_mut());
+                    map.transform_row_into(x, r, z_r.as_mut());
                     let w = weights[r];
                     let y_c = y[r] - self.base_value;
 
@@ -177,7 +177,7 @@ impl Regressor {
             let x_chunk = x.subrows(start_row, n_chunk);
 
             // Map raw input to the feature space for this chunk
-            let z_matrices = map.transform(x_chunk);
+            let z_matrices = map.transform_split_features(x_chunk);
 
             // Parallel computation for the chunk: y_pred = Sum(Z_i * coeff_i)
             let chunk_pred = (0..num_features)
@@ -227,7 +227,7 @@ impl Regressor {
             let n_chunk = end_row - start_row;
             let x_chunk = x.subrows(start_row, n_chunk);
 
-            let z_matrices = map.transform(x_chunk);
+            let z_matrices = map.transform_split_features(x_chunk);
 
             let chunk_contributions: Vec<Col<f32>> = (0..num_features)
                 .into_par_iter()

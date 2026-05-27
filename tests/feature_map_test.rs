@@ -1,4 +1,4 @@
-use faer::Mat;
+use faer::{Col, Mat};
 use xuplift::feature_map::KernelFeatureMap;
 
 #[test]
@@ -23,7 +23,7 @@ fn test_transform_batch() {
     let mut kfm = KernelFeatureMap::new();
     kfm.fit(data.as_ref());
 
-    let transformed = kfm.transform(data.as_ref());
+    let transformed = kfm.transform_split_features(data.as_ref());
     assert_eq!(transformed.len(), 2);
     assert_eq!(transformed[0].nrows(), 5);
     assert_eq!(transformed[0].ncols(), kfm.num_bases);
@@ -36,9 +36,11 @@ fn test_transform_row_matches_transform_batch() {
     let mut kfm = KernelFeatureMap::new();
     kfm.fit(data.as_ref());
 
-    let transformed_batch = kfm.transform(data.as_ref());
+    let transformed_batch = kfm.transform_split_features(data.as_ref());
     for row_idx in 0..5 {
-        let transformed_row = kfm.transform_row(data.as_ref(), row_idx);
+        let total_dim = kfm.num_features * kfm.num_bases;
+        let mut transformed_row = Col::<f32>::zeros(total_dim);
+        kfm.transform_row_into(data.as_ref(), row_idx, transformed_row.as_mut());
         for f_idx in 0..2 {
             let offset = f_idx * kfm.num_bases;
             for b in 0..kfm.num_bases {
@@ -73,7 +75,10 @@ fn test_nan_handling_in_feature_map() {
     // Test transform_row with a NaN row
     // Verify that the transformer correctly masks NaNs by outputting a zero vector.
     let x_nan = Mat::from_fn(1, 1, |_, _| f32::NAN);
-    let z_nan = kfm.transform_row(x_nan.as_ref(), 0);
+
+    let total_dim = kfm.num_features * kfm.num_bases;
+    let mut z_nan = Col::<f32>::zeros(total_dim);
+    kfm.transform_row_into(x_nan.as_ref(), 0, z_nan.as_mut());
     assert!(
         z_nan.iter().all(|&val| val == 0.0),
         "Output for NaN should be zero vector"
@@ -81,38 +86,11 @@ fn test_nan_handling_in_feature_map() {
 
     // Test transform_row with a valid row
     let x_valid = Mat::from_fn(1, 1, |_, _| 2.0);
-    let z_valid = kfm.transform_row(x_valid.as_ref(), 0);
+    let total_dim = kfm.num_features * kfm.num_bases;
+    let mut z_valid = Col::<f32>::zeros(total_dim);
+    kfm.transform_row_into(x_valid.as_ref(), 0, z_valid.as_mut());
     assert!(
         z_valid.iter().any(|&val| val != 0.0),
         "Output for valid value should not be zero vector"
     );
-}
-
-#[test]
-fn test_transform_row_to_slice_correctness() {
-    // Explicitly verify that transform_row_to_slice writes correctly to an external buffer.
-    use faer::Col;
-
-    let data = Mat::from_fn(3, 2, |r, c| (r + c) as f32);
-    let mut kfm = KernelFeatureMap::new();
-    kfm.fit(data.as_ref());
-
-    let total_dim = kfm.num_features * kfm.num_bases;
-    let mut buffer = Col::<f32>::zeros(total_dim);
-
-    for r in 0..3 {
-        // Use the new slice-based transform
-        kfm.transform_row_to_slice(data.as_ref(), r, buffer.as_mut());
-
-        // Compare with the standard transform_row
-        let expected = kfm.transform_row(data.as_ref(), r);
-
-        for i in 0..total_dim {
-            assert_eq!(
-                buffer[i], expected[i],
-                "Buffer and expected row mismatch at row {} index {}",
-                r, i
-            );
-        }
-    }
 }

@@ -94,7 +94,7 @@ impl Classifier {
                         )
                     },
                     |(mut acc_h, mut acc_g, mut z_r), r| {
-                        map.transform_row_to_slice(x, r, z_r.as_mut());
+                        map.transform_row_into(x, r, z_r.as_mut());
 
                         // Linear prediction: raw_pred = z^T * w + base_value
                         let mut raw_pred = base_val;
@@ -199,7 +199,7 @@ impl Classifier {
             let n_chunk = end_row - start_row;
             let x_chunk = x.subrows(start_row, n_chunk);
 
-            let z_matrices = map.transform(x_chunk);
+            let z_matrices = map.transform_split_features(x_chunk);
 
             let chunk_pred = (0..num_features)
                 .into_par_iter()
@@ -248,7 +248,7 @@ impl Classifier {
             let n_chunk = end_row - start_row;
             let x_chunk = x.subrows(start_row, n_chunk);
 
-            let z_matrices = map.transform(x_chunk);
+            let z_matrices = map.transform_split_features(x_chunk);
 
             let chunk_contributions: Vec<Col<f32>> = (0..num_features)
                 .into_par_iter()
