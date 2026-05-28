@@ -4,7 +4,7 @@ use crate::xmodels::regressor::Regressor;
 
 /// T-Learner (Two-Learner) for Uplift Modeling.
 ///
-/// This learner splits the data by treatment assignment and trains two independent models:
+/// This learner splits the data by treatment assignment and fits two independent models:
 /// $$\mu_1(x) = E[Y | X=x, T=1]$$
 /// $$\mu_0(x) = E[Y | X=x, T=0]$$
 /// The uplift is estimated as:
@@ -13,9 +13,9 @@ use crate::xmodels::regressor::Regressor;
 /// # Reference
 /// * Künzel, S. R., Sekhon, J. S., Bickel, P. J., & Yu, B. (2019). Metalearners for estimating heterogeneous treatment effects using machine learning. Proceedings of the National Academy of Sciences, 116(10), 4156–4165. https://doi.org/10.1073/pnas.1804597116
 pub struct TLearner {
-    /// Regressor trained exclusively on the treatment group (T=1).
+    /// Regressor fitted exclusively on the treatment group (T=1).
     pub mu_t1: Regressor,
-    /// Regressor trained exclusively on the control group (T=0).
+    /// Regressor fitted exclusively on the control group (T=0).
     pub mu_t0: Regressor,
 }
 
@@ -36,10 +36,11 @@ impl TLearner {
         let num_rows = x.nrows();
 
         // Create weights for T=1 and T=0
+        // Use weighted fitting for stability and to avoid explicit data slicing
         let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
         let w_t0 = Col::<f32>::from_fn(num_rows, |i| if t[i] <= 0.5 { 1.0 } else { 0.0 });
 
-        // Train Models using weighted fitting on the full original matrix
+        // Fit models concurrently using weighted fitting
         let (mu_t1, mu_t0) = rayon::join(
             || {
                 let mut mu_t1 = Regressor::new(mu_penalty);

@@ -7,7 +7,7 @@ use crate::xmodels::regressor::Regressor;
 /// R-Learner (Residual Learner) for Uplift Modeling.
 ///
 /// This learner focuses on the residual-on-residual regression.
-/// It first trains an outcome model $m(x) = E[Y|X]$ and a propensity model $e(x) = E[T|X]$.
+/// It first fits an outcome model $m(x) = E[Y|X]$ and a propensity model $e(x) = E[T|X]$.
 /// The treatment effect $\tau(x)$ is then estimated by minimizing the R-objective:
 /// $$\min_{\tau} \sum_{i=1}^n [ (y_i - m(x_i)) - (t_i - e(x_i)) \tau(x_i) ]^2$$
 ///
@@ -40,7 +40,7 @@ impl RLearner {
     ) -> Self {
         let num_rows = x.nrows();
 
-        // Train and predict outcome model mu(x) and propensity model p(x)
+        // Fit and predict outcome model mu(x) and propensity model p(x) concurrently
         let (mu_pred, p_pred) = rayon::join(
             || {
                 let mut mu = Regressor::new(mu_penalty);
@@ -54,7 +54,7 @@ impl RLearner {
             },
         );
 
-        // Compute Residuals
+        // Compute residuals and weighted targets
         let (r_target, r_weights): (Vec<f32>, Vec<f32>) = (0..num_rows)
             .into_par_iter()
             .map(|i| {
@@ -77,7 +77,7 @@ impl RLearner {
         let r_target_col = Col::<f32>::from_fn(num_rows, |i| r_target[i]);
         let r_weights_col = Col::<f32>::from_fn(num_rows, |i| r_weights[i]);
 
-        // Train the tau model on the R-objective target with weights
+        // Fit model on weighted targets
         let mut tau = Regressor::new(tau_penalty);
         tau.fit_weighted(x, r_target_col.as_ref(), &r_weights_col);
 

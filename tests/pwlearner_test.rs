@@ -31,7 +31,7 @@ fn test_pwlearner() {
     }
 
     // --- Model Initialization ---
-    // PWLearner internally trains a propensity classifier and trains a single tau model directly on the modified target.
+    // PWLearner fits a propensity classifier and fits a tau model on the pseudo-outcomes.
     let pwlearner = PWLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.5, 10, 0.5);
 
     // --- Prediction ---
@@ -56,7 +56,7 @@ fn test_pwlearner() {
     );
 
     // --- Verification: Explanation Consistency ---
-    // In PW-Learner, the explanation is straightforward because it uses a single tau regressor.
+    // In PW-Learner, the explanation is straightforward because it uses a tau regressor.
     let uplift_explanation = pwlearner.explain_uplift(x.as_ref());
 
     // PW-Learner's explanation matrix should have n_features columns.

@@ -32,7 +32,7 @@ fn test_mlearner() {
     }
 
     // --- Model Initialization ---
-    // MLearner internally applies target transformation and trains a single tau model directly on the modified target.
+    // MLearner applies target transformation and fits a tau model on the pseudo-outcomes.
     let mlearner = MLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1);
 
     // --- Prediction ---
@@ -57,7 +57,7 @@ fn test_mlearner() {
     );
 
     // --- Verification: Explanation Consistency ---
-    // In M-Learner, the explanation is straightforward because it uses a single tau regressor.
+    // In M-Learner, the explanation is straightforward because it uses a tau regressor.
     let uplift_explanation = mlearner.explain_uplift(x.as_ref());
 
     // M-Learner's explanation matrix should have n_features columns.

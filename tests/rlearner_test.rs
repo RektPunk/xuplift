@@ -33,7 +33,7 @@ fn test_rlearner() {
     }
 
     // --- Model Initialization ---
-    // R-Learner trains: m(x) [Outcome], e(x) [Propensity], and tau(x) [Residual-on-Residual]
+    // R-Learner fits: m(x) [Outcome], e(x) [Propensity], and tau(x) [Residual-on-Residual]
     let rlearner = RLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
 
     // --- Prediction ---
@@ -70,12 +70,12 @@ fn test_rlearner() {
         }
 
         // Reconstructed Uplift = sum(feature_contributions) + base_value
-        let reconstructed_uplift = explained_total + rlearner.tau.base_value;
+        let total_reconstructed_uplift = explained_total + rlearner.tau.base_value;
         assert!(
-            (reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
+            (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
             "R-Learner explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
             i,
-            reconstructed_uplift,
+            total_reconstructed_uplift,
             uplift_estimate[i]
         );
     }

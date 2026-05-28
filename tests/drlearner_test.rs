@@ -34,7 +34,7 @@ fn test_drlearner() {
     }
 
     // --- Model Initialization ---
-    // DR-Learner internally trains 4 models:
+    // DR-Learner fits 4 models:
     // Stage 1: mu_1, mu_0 (base outcomes) | Stage 2: p (propensity score)
     // Stage 3: Construct pseudo-outcomes | Stage 4: tau (CATE regressor)
     let drlearner = DRLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
@@ -61,7 +61,7 @@ fn test_drlearner() {
     );
 
     // --- Verification: Explanation Consistency ---
-    // In DR-Learner, the explanation is straightforward because it uses a single tau regressor.
+    // In DR-Learner, the explanation is straightforward because it uses a tau regressor.
     let uplift_explanation = drlearner.explain_uplift(x.as_ref());
     assert_eq!(uplift_explanation.ncols(), n_features);
 

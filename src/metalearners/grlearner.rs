@@ -37,27 +37,26 @@ impl GRLearner {
     ) -> Self {
         let num_rows = x.nrows();
 
-        // Train and predict outcome model mu(x) and treatment model m_t(x) in parallel
-        // GRLearner uses Regressor for BOTH models to support continuous treatment.
-        let (mu_pred, t_pred) = rayon::join(
+        // Fit and predict outcome model mu(x) and treatment model p(x) concurrently
+        let (mu_pred, p_pred) = rayon::join(
             || {
                 let mut mu = Regressor::new(mu_penalty);
                 mu.fit(x, y);
                 mu.predict(x)
             },
             || {
-                let mut model_t = Regressor::new(p_penalty);
-                model_t.fit(x, t);
-                model_t.predict(x)
+                let mut p = Regressor::new(p_penalty);
+                p.fit(x, t);
+                p.predict(x)
             },
         );
 
-        // Compute Residuals & Construct Weighted Targets
+        // Compute residuals and weighted targets
         let (r_target, r_weights): (Vec<f32>, Vec<f32>) = (0..num_rows)
             .into_par_iter()
             .map(|i| {
                 let y_tilde = y[i] - mu_pred[i];
-                let t_tilde = t[i] - t_pred[i];
+                let t_tilde = t[i] - p_pred[i];
 
                 // Objective: Minimize (y_tilde - t_tilde * tau)^2
                 // Equivalent to Weighted Least Squares: Minimize sum( w_i * (target_i - tau)^2 )
@@ -74,7 +73,7 @@ impl GRLearner {
         let r_target_col = Col::<f32>::from_fn(num_rows, |i| r_target[i]);
         let r_weights_col = Col::<f32>::from_fn(num_rows, |i| r_weights[i]);
 
-        // Train the tau model on the R-objective target with weights
+        // Fit model on weighted targets
         let mut tau = Regressor::new(tau_penalty);
         tau.fit_weighted(x, r_target_col.as_ref(), &r_weights_col);
 

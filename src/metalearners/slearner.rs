@@ -4,7 +4,7 @@ use crate::xmodels::regressor::Regressor;
 
 /// S-Learner (Single Learner) for Uplift Modeling.
 ///
-/// This learner treats the treatment assignment $T$ as an additional feature in a single response surface model:
+/// This learner treats the treatment assignment $T$ as an additional feature in a response surface model:
 /// $$\mu(x, t) = E[Y | X=x, T=t]$$
 /// The uplift is estimated as:
 /// $$\tau(x) = \mu(x, 1) - \mu(x, 0)$$
@@ -12,7 +12,7 @@ use crate::xmodels::regressor::Regressor;
 /// # Reference
 /// * Künzel, S. R., Sekhon, J. S., Bickel, P. J., & Yu, B. (2019). Metalearners for estimating heterogeneous treatment effects using machine learning. Proceedings of the National Academy of Sciences, 116(10), 4156–4165. https://doi.org/10.1073/pnas.1804597116
 pub struct SLearner {
-    /// The underlying Regressor trained on augmented features (X, T).
+    /// Regressor fitted on combined features (X, T).
     pub mu: Regressor,
 }
 
@@ -34,16 +34,16 @@ impl SLearner {
         let num_cols = x.ncols();
         let mut x_combined = Mat::<f32>::zeros(num_rows, num_cols + 1);
 
-        // Copy original features X into the augmented matrix
+        // Copy features X into the combined matrix
         x_combined
             .as_mut()
             .submatrix_mut(0, 0, num_rows, num_cols)
             .copy_from(x);
 
-        // Append the treatment vector T as the column
+        // Append treatment vector T
         x_combined.as_mut().col_mut(num_cols).copy_from(t);
 
-        // Initialize and fit the Regressor using the augmented features
+        // Fit Regressor on combined features (X, T)
         let mut mu = Regressor::new(mu_penalty);
         mu.fit(x_combined.as_ref(), y);
 
@@ -55,7 +55,7 @@ impl SLearner {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
 
-        let (pred_t1, pred_t0) = rayon::join(
+        let (mu_t1_pred, mu_t0_pred) = rayon::join(
             || {
                 let mut scratch = Mat::<f32>::zeros(num_rows, num_cols + 1);
                 scratch
@@ -75,7 +75,7 @@ impl SLearner {
                 self.mu.predict(scratch.as_ref())
             },
         );
-        pred_t1 - pred_t0
+        mu_t1_pred - mu_t0_pred
     }
 
     /// Explains the uplift by decomposing the feature contributions.

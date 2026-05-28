@@ -6,11 +6,11 @@ use crate::xmodels::regressor::Regressor;
 /// X-Learner (Cross-Learner) for Uplift Modeling.
 ///
 /// This learner uses a three-stage process:
-/// 1. Train outcome models $\mu_1(x)$ and $\mu_0(x)$.
+/// 1. Fit outcome models $\mu_1(x)$ and $\mu_0(x)$.
 /// 2. Impute treatment effects:
 ///    $D_1 = Y_1 - \mu_0(X_1)$
 ///    $D_0 = \mu_1(X_0) - Y_0$
-/// 3. Train models $\tau_1(x)$ and $\tau_0(x)$ to predict $D_1$ and $D_0$.
+/// 3. Fit models $\tau_1(x)$ and $\tau_0(x)$ to predict $D_1$ and $D_0$.
 ///
 /// The uplift is the propensity-weighted average:
 /// $\tau(x) = g(x) \tau_0(x) + (1 - g(x)) \tau_1(x)$
@@ -53,25 +53,24 @@ impl XLearner {
         let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
         let w_t0 = Col::<f32>::from_fn(num_rows, |i| if t[i] <= 0.5 { 1.0 } else { 0.0 });
 
-        // Train outcome models using weighted fitting on the full matrix
-        let (mu_1, mu_0) = rayon::join(
+        // Fit outcome models concurrently
+        let (mu_t1, mu_t0) = rayon::join(
             || {
-                let mut mu_1 = Regressor::new(mu_penalty);
-                mu_1.fit_weighted(x, y, &w_t1);
-                mu_1
+                let mut mu_t1 = Regressor::new(mu_penalty);
+                mu_t1.fit_weighted(x, y, &w_t1);
+                mu_t1
             },
             || {
-                let mut mu_0 = Regressor::new(mu_penalty);
-                mu_0.fit_weighted(x, y, &w_t0);
-                mu_0
+                let mut mu_t0 = Regressor::new(mu_penalty);
+                mu_t0.fit_weighted(x, y, &w_t0);
+                mu_t0
             },
         );
 
-        // Impute Treatment Effects: D1 = Y - mu_0(X), D0 = mu_1(X) - Y
-        // Compute these for all rows, but they will be filtered by weights during tau model fitting
-        let (d_1, d_0) = rayon::join(|| y - mu_0.predict(x), || mu_1.predict(x) - y);
+        // Impute treatment effects concurrently: D1 = Y - mu_0(X), D0 = mu_1(X) - Y
+        let (d_1, d_0) = rayon::join(|| y - mu_t0.predict(x), || mu_t1.predict(x) - y);
 
-        // Train tau models and propensity model
+        // Fit tau models and propensity model concurrently
         let ((tau_t1, tau_t0), p) = rayon::join(
             || {
                 rayon::join(
@@ -99,14 +98,14 @@ impl XLearner {
 
     /// Estimates the uplift score $\tau(x)$ for the given features.
     pub fn predict_uplift(&self, x: MatRef<'_, f32>) -> Col<f32> {
-        let (g, (t_1, t_0)) = rayon::join(
+        let (g, (tau_t1_pred, tau_t0_pred)) = rayon::join(
             || self.p.predict(x), // P(T=1 | X)
             || rayon::join(|| self.tau_t1.predict(x), || self.tau_t0.predict(x)),
         );
 
         Col::from_fn(x.nrows(), |i| {
             let gi = g[i].clamp(0.01, 0.99);
-            gi * t_0[i] + (1.0 - gi) * t_1[i]
+            gi * tau_t0_pred[i] + (1.0 - gi) * tau_t1_pred[i]
         })
     }
 

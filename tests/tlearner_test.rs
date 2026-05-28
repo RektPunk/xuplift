@@ -58,7 +58,6 @@ fn test_tlearner() {
 
     // --- Verification: Explanation Consistency ---
     // In T-Learner, the explanation is the difference between two models' contributions.
-    // Σ(Contribution_T1 - Contribution_T0) == Predict_T1 - Predict_T0
     let uplift_explanation = tlearner.explain_uplift(x.as_ref());
 
     // T-Learner's explanation matrix should have n_features columns.

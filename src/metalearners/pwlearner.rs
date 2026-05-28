@@ -1,4 +1,5 @@
 use faer::{Col, ColRef, Mat, MatRef};
+use rayon::prelude::*;
 
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
@@ -11,7 +12,7 @@ use crate::xmodels::regressor::Regressor;
 /// # Reference
 /// * Robins, J. M., Hernán, M. Á., & Brumback, B. (2000). Marginal structural models and causal inference in epidemiology. Epidemiology, 11(5), 550–560. https://doi.org/10.1097/00001648-200009000-00011
 pub struct PWLearner {
-    /// Treatment effect model trained on inverse-probability-weighted pseudo-outcomes
+    /// Treatment effect model fitted on inverse-probability-weighted pseudo-outcomes
     pub tau: Regressor,
 }
 
@@ -40,20 +41,24 @@ impl PWLearner {
         p.fit(x, t);
         let p_pred = p.predict(x);
 
-        // Construct Inverse Probability Weighted Pseudo-Outcomes
+        // Construct pseudo-outcomes in parallel
         // Y* = Y * [T / e(x) - (1-T) / (1-e(x))]
-        let y_star = Col::<f32>::from_fn(num_rows, |i| {
-            let gi = p_pred[i].clamp(0.01, 0.99); // Prevent division by zero
-            if t[i] > 0.5 {
-                y[i] / gi
-            } else {
-                -y[i] / (1.0 - gi)
-            }
-        });
+        let y_pw_vec: Vec<f32> = (0..num_rows)
+            .into_par_iter()
+            .map(|i| {
+                let gi = p_pred[i].clamp(0.01, 0.99); // Prevent division by zero
+                if t[i] > 0.5 {
+                    y[i] / gi
+                } else {
+                    -y[i] / (1.0 - gi)
+                }
+            })
+            .collect();
+        let y_pw = Col::from_fn(num_rows, |i| y_pw_vec[i]);
 
-        // Train the single tau model on the IPW target
+        // Fit model on pseudo-outcomes
         let mut tau = Regressor::new(tau_penalty);
-        tau.fit(x, y_star.as_ref());
+        tau.fit(x, y_pw.as_ref());
 
         Self { tau }
     }

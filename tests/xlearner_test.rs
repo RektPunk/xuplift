@@ -34,7 +34,7 @@ fn test_xlearner() {
     }
 
     // --- Model Initialization ---
-    // X-Learner internally trains 5 models:
+    // X-Learner fits 5 models:
     // Stage 1: mu_1, mu_0 | Stage 2: tau_1, tau_0 | Stage 3: p (propensity)
     let xlearner = XLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
 
@@ -67,26 +67,26 @@ fn test_xlearner() {
     // X-Learner's explanation matrix should have n_features columns.
     assert_eq!(uplift_explanation.ncols(), n_features);
 
-    let propensity = xlearner.p.predict(x.as_ref());
+    let p_pred = xlearner.p.predict(x.as_ref());
 
     for i in 0..x.nrows() {
-        let mut feature_contribution_sum = 0.0;
+        let mut explained_total = 0.0;
         for j in 0..n_features {
-            feature_contribution_sum += uplift_explanation[(i, j)];
+            explained_total += uplift_explanation[(i, j)];
         }
 
         // Reconstructed Uplift = sum(weighted_feature_contributions) + dynamic_base_value
         // Dynamic Base Value: g(x)*base_tau0 + (1-g(x))*base_tau1
-        let gi = propensity[i].clamp(0.01, 0.99);
+        let gi = p_pred[i].clamp(0.01, 0.99);
         let dynamic_base =
             gi * xlearner.tau_t0.base_value + (1.0 - gi) * xlearner.tau_t1.base_value;
 
-        let reconstructed_uplift = feature_contribution_sum + dynamic_base;
+        let total_reconstructed_uplift = explained_total + dynamic_base;
         assert!(
-            (reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
+            (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
             "X-Learner explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
             i,
-            reconstructed_uplift,
+            total_reconstructed_uplift,
             uplift_estimate[i]
         );
     }
