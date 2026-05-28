@@ -9,10 +9,14 @@
 - Classifier: Kernel-based Logistic classifier for precise propensity score estimation.
 
 ## Supported Meta-Learners
-- RLearner: Residual-on-residual estimator.
-- SLearner: Single-learner approach treating treatment as a feature.
-- TLearner: Two-learner approach for baseline causal analysis.
-- XLearner: Cross-learner optimized for significantly unbalanced treatment groups.
+- DRLearner: Doubly robust estimator combining propensity scores and outcome models.
+- GRLearner: Generalized R-learner supporting both continuous and binary treatments.
+- MLearner: Modified covariates learner optimized for randomized controlled trials (RCT).
+- PWLearner: Propensity score weighted learner using inverse probability weighting.
+- RLearner: Residual learner minimizing an R-objective via residual-on-residual regression.
+- SLearner: Single learner treating treatment assignment as a standard feature.
+- TLearner: Two learner approach fitting independent models for each group.
+- XLearner: Cross learner optimized for significantly unbalanced treatment groups.
 
 # Installation
 ```bash
