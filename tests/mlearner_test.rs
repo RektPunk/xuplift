@@ -11,7 +11,7 @@ fn test_mlearner() {
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // Synthetic Data Generation
+    // --- Synthetic Data Generation ---
     // Objective: Create a dataset with a known constant treatment effect.
     // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
     // Ground Truth Uplift (ITE): 5.0
@@ -31,14 +31,14 @@ fn test_mlearner() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
-    // Initialize MLearner which internally applies target transformation
-    // and trains a single tau model directly on the modified target.
+    // --- Model Initialization ---
+    // MLearner internally applies target transformation and trains a single tau model directly on the modified target.
     let mlearner = MLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1);
 
-    // Estimate Individual Treatment Effect (ITE).
+    // --- Prediction ---
     let uplift_estimate = mlearner.predict_uplift(x.as_ref());
 
-    // Verify if the average estimated uplift is close to the true effect.
+    // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -56,24 +56,21 @@ fn test_mlearner() {
         avg_uplift
     );
 
-    // Verify Mathematical Explanation Consistency
+    // --- Verification: Explanation Consistency ---
     // In M-Learner, the explanation is straightforward because it uses a single tau regressor.
-    // The sum of features plus the static base_value must equal the prediction.
     let uplift_explanation = mlearner.explain_uplift(x.as_ref());
 
     // M-Learner's explanation matrix should have n_features columns.
     assert_eq!(uplift_explanation.ncols(), n_features);
 
-    // Extract the static base value once outside the loop for mathematical correctness
     let base_value = mlearner.tau.base_value;
-
     for i in 0..x.nrows() {
         let mut explained_total = 0.0;
         for j in 0..uplift_explanation.ncols() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // The sum of contributions + base must equal the explained uplift
+        // Reconstructed Uplift = sum(feature_contributions) + base_value
         let total_reconstructed_uplift = explained_total + base_value;
         assert!(
             (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
@@ -83,5 +80,5 @@ fn test_mlearner() {
             uplift_estimate[i]
         );
     }
-    println!("MLearner Uplift Delta Explanation check passed!");
+    println!("MLearner verification passed!");
 }

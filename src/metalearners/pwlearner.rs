@@ -3,10 +3,13 @@ use faer::{Col, ColRef, Mat, MatRef};
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
 
-/// Propensity Score Weighted Learner (PW-Learner / IPW-Learner) for Uplift Modeling.
+/// Propensity Score Weighted Learner (PW-Learner) for Uplift Modeling.
 ///
 /// This learner uses inverse probability weighting (IPW) to transform the target variable,
 /// correcting for confounding bias using only a propensity score model.
+///
+/// # Reference
+/// * Robins, J. M., Hernán, M. Á., & Brumback, B. (2000). Marginal structural models and causal inference in epidemiology. Epidemiology, 11(5), 550–560. https://doi.org/10.1097/00001648-200009000-00011
 pub struct PWLearner {
     /// Treatment effect model trained on inverse-probability-weighted pseudo-outcomes
     pub tau: Regressor,
@@ -16,12 +19,12 @@ impl PWLearner {
     /// Initializes and fits the PWLearner using the provided data.
     ///
     /// # Arguments
-    /// * `x` - The original feature matrix (n_samples x n_features).
-    /// * `t` - The treatment assignment vector (n_samples, 0 or 1).
-    /// * `y` - The observed outcome vector.
-    /// * `p_penalty` - The regularization penalty for the propensity classifier.
-    /// * `p_max_iter` - The maximum number of iterations for the propensity classifier.
-    /// * `tau_penalty` - The regularization penalty for the treatment effect model.
+    /// * `x` - Feature matrix (n_samples x n_features).
+    /// * `t` - Treatment vector (n_samples).
+    /// * `y` - Outcome vector (n_samples).
+    /// * `p_penalty` - Regularization penalty for the propensity model.
+    /// * `p_max_iter` - Maximum iterations for the propensity model solver.
+    /// * `tau_penalty` - Regularization penalty for the treatment effect model.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
@@ -55,12 +58,12 @@ impl PWLearner {
         Self { tau }
     }
 
-    /// Estimates the uplift score: $\hat{\tau}(x)$ directly using the single PW model.
+    /// Estimates the uplift score $\tau(x)$ for the given features.
     pub fn predict_uplift(&self, x: MatRef<'_, f32>) -> Col<f32> {
         self.tau.predict(x)
     }
 
-    /// Explains the uplift by decomposing the feature contributions of the single model.
+    /// Explains the uplift by decomposing the feature contributions.
     pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         self.tau.explain(x)
     }

@@ -11,7 +11,7 @@ fn test_drlearner() {
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // Synthetic Data Generation with Imbalance
+    // --- Synthetic Data Generation ---
     // Objective: Simulate a scenario where Treatment (T=1) is rare.
     // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
     // Ground Truth Uplift (ITE): 5.0
@@ -33,15 +33,16 @@ fn test_drlearner() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
+    // --- Model Initialization ---
     // DR-Learner internally trains 4 models:
     // Stage 1: mu_1, mu_0 (base outcomes) | Stage 2: p (propensity score)
     // Stage 3: Construct pseudo-outcomes | Stage 4: tau (CATE regressor)
     let drlearner = DRLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
 
-    // Estimate Individual Treatment Effect (ITE) using the single DR model
+    // --- Prediction ---
     let uplift_estimate = drlearner.predict_uplift(x.as_ref());
 
-    // Verify if the average estimated uplift is close to the true effect.
+    // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -59,7 +60,7 @@ fn test_drlearner() {
         avg_uplift
     );
 
-    // Verify Mathematical Explanation Consistency
+    // --- Verification: Explanation Consistency ---
     // In DR-Learner, the explanation is straightforward because it uses a single tau regressor.
     let uplift_explanation = drlearner.explain_uplift(x.as_ref());
     assert_eq!(uplift_explanation.ncols(), n_features);
@@ -71,7 +72,7 @@ fn test_drlearner() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // The sum of contributions + base must equal the explained uplift
+        // Reconstructed Uplift = sum(feature_contributions) + base_value
         let total_reconstructed_uplift = explained_total + base_value;
         assert!(
             (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
@@ -81,5 +82,5 @@ fn test_drlearner() {
             uplift_estimate[i]
         );
     }
-    println!("DRLearner Uplift Delta Explanation check passed!");
+    println!("DRLearner verification passed!");
 }

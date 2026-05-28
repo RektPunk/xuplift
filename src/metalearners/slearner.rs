@@ -2,12 +2,15 @@ use faer::{Col, ColRef, Mat, MatRef};
 
 use crate::xmodels::regressor::Regressor;
 
-/// S-Learner (Single Learner) for Uplift Modeling using a Kernel-based Regressor.
+/// S-Learner (Single Learner) for Uplift Modeling.
 ///
 /// This learner treats the treatment assignment $T$ as an additional feature in a single response surface model:
 /// $$\mu(x, t) = E[Y | X=x, T=t]$$
 /// The uplift is estimated as:
 /// $$\tau(x) = \mu(x, 1) - \mu(x, 0)$$
+///
+/// # Reference
+/// * Künzel, S. R., Sekhon, J. S., Bickel, P. J., & Yu, B. (2019). Metalearners for estimating heterogeneous treatment effects using machine learning. Proceedings of the National Academy of Sciences, 116(10), 4156–4165. https://doi.org/10.1073/pnas.1804597116
 pub struct SLearner {
     /// The underlying Regressor trained on augmented features (X, T).
     pub mu: Regressor,
@@ -17,10 +20,10 @@ impl SLearner {
     /// Initializes and fits the SLearner using the provided data.
     ///
     /// # Arguments
-    /// * `x` - The original feature matrix (n_samples x n_features).
-    /// * `t` - The treatment assignment vector (n_samples, 0 or 1).
-    /// * `y` - The observed outcome vector.
-    /// * `mu_penalty` - The regularization penalty for the regressor.
+    /// * `x` - Feature matrix (n_samples x n_features).
+    /// * `t` - Treatment vector (n_samples).
+    /// * `y` - Outcome vector (n_samples).
+    /// * `mu_penalty` - Regularization penalty for the outcome model.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
@@ -47,7 +50,7 @@ impl SLearner {
         Self { mu }
     }
 
-    /// Estimates the uplift score: $\tau(x) = E[Y | X=x, T=1] - E[Y | X=x, T=0]$
+    /// Estimates the uplift score $\tau(x)$ for the given features.
     pub fn predict_uplift(&self, x: MatRef<'_, f32>) -> Col<f32> {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
@@ -75,13 +78,9 @@ impl SLearner {
         pred_t1 - pred_t0
     }
 
-    /// Explains the uplift by decomposing the difference in feature contributions.
+    /// Explains the uplift by decomposing the feature contributions.
     ///
-    /// This method calculates the "Incremental Contribution" of each feature,
-    /// showing how the treatment changes the impact of each variable on the outcome.
-    ///
-    /// # Returns
-    /// A matrix of dimensions (n_samples x (n_features + 1)),
+    /// Return a matrix of dimensions (n_samples x (n_features + 1)),
     /// where the last column represents the direct effect of the treatment variable itself.
     pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         let num_rows = x.nrows();

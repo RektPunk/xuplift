@@ -11,7 +11,7 @@ fn test_tlearner() {
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // Synthetic Data Generation
+    // --- Synthetic Data Generation ---
     // Objective: Create a dataset with a known constant treatment effect.
     // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
     // Ground Truth Uplift (ITE): 5.0
@@ -32,13 +32,13 @@ fn test_tlearner() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
-    // Initialize TLearner which splits data into T=1 and T=0 and trains two regressors.
+    // --- Model Initialization ---
     let tlearner = TLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.01);
 
-    // Estimate Individual Treatment Effect (ITE)
+    // --- Prediction ---
     let uplift_estimate = tlearner.predict_uplift(x.as_ref());
 
-    // Verify if the average estimated uplift is close to the true effect.
+    // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -56,9 +56,9 @@ fn test_tlearner() {
         avg_uplift
     );
 
-    // Verify Mathematical Explanation Consistency
+    // --- Verification: Explanation Consistency ---
     // In T-Learner, the explanation is the difference between two models' contributions.
-    // Mathematical Consistency: Σ(Contribution_T1 - Contribution_T0) == Predict_T1 - Predict_T0
+    // Σ(Contribution_T1 - Contribution_T0) == Predict_T1 - Predict_T0
     let uplift_explanation = tlearner.explain_uplift(x.as_ref());
 
     // T-Learner's explanation matrix should have n_features columns.
@@ -70,7 +70,7 @@ fn test_tlearner() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // The sum of contributions must equal the explained uplift + base value difference for each sample.
+        // Reconstructed Uplift = sum(feature_contributions) + delta_base_values
         let base_value_diff = tlearner.mu_t1.base_value - tlearner.mu_t0.base_value;
         let total_reconstructed_uplift = explained_total + base_value_diff;
         assert!(
@@ -81,5 +81,5 @@ fn test_tlearner() {
             uplift_estimate[i]
         );
     }
-    println!("TLearner Uplift Delta Explanation check passed!");
+    println!("TLearner verification passed!");
 }

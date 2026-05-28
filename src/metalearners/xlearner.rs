@@ -3,7 +3,7 @@ use faer::{Col, ColRef, Mat, MatRef};
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
 
-/// X-Learner for Uplift Modeling.
+/// X-Learner (Cross-Learner) for Uplift Modeling.
 ///
 /// This learner uses a three-stage process:
 /// 1. Train outcome models $\mu_1(x)$ and $\mu_0(x)$.
@@ -15,6 +15,9 @@ use crate::xmodels::regressor::Regressor;
 /// The uplift is the propensity-weighted average:
 /// $\tau(x) = g(x) \tau_0(x) + (1 - g(x)) \tau_1(x)$
 /// where $g(x)$ is the propensity score $E[T|X]$.
+///
+/// # Reference
+/// * Künzel, S. R., Sekhon, J. S., Bickel, P. J., & Yu, B. (2019). Metalearners for estimating heterogeneous treatment effects using machine learning. Proceedings of the National Academy of Sciences, 116(10), 4156–4165. https://doi.org/10.1073/pnas.1804597116
 pub struct XLearner {
     /// Imputed effect models
     pub tau_t1: Regressor,
@@ -28,13 +31,13 @@ impl XLearner {
     /// Initializes and fits the XLearner using the provided data.
     ///
     /// # Arguments
-    /// * `x` - The original feature matrix (n_samples x n_features).
-    /// * `t` - The treatment assignment vector (n_samples, 0 or 1).
-    /// * `y` - The observed outcome vector.
-    /// * `mu_penalty` - The regularization penalty for the regressor.
-    /// * `p_penalty` - The regularization penalty for the propensity model.
-    /// * `p_max_iter` - The maximum number of iterations for the propensity model.
-    /// * `tau_penalty` - The regularization penalty for the tau models.
+    /// * `x` - Feature matrix (n_samples x n_features).
+    /// * `t` - Treatment vector (n_samples).
+    /// * `y` - Outcome vector (n_samples).
+    /// * `mu_penalty` - Regularization penalty for the outcome models.
+    /// * `p_penalty` - Regularization penalty for the propensity model.
+    /// * `p_max_iter` - Maximum iterations for the propensity model solver.
+    /// * `tau_penalty` - Regularization penalty for the treatment effect models.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
@@ -94,7 +97,7 @@ impl XLearner {
         Self { tau_t1, tau_t0, p }
     }
 
-    /// Estimates the uplift score: $\tau(x) = g(x)\hat{\tau}_0(x) + (1 - g(x))\hat{\tau}_1(x)$
+    /// Estimates the uplift score $\tau(x)$ for the given features.
     pub fn predict_uplift(&self, x: MatRef<'_, f32>) -> Col<f32> {
         let (g, (t_1, t_0)) = rayon::join(
             || self.p.predict(x), // P(T=1 | X)
@@ -107,15 +110,7 @@ impl XLearner {
         })
     }
 
-    /// Explains the uplift by decomposing the weighted feature contributions.
-    ///
-    /// This method calculates the "Weighted Incremental Contribution" of each feature.
-    /// Since the X-Learner prediction is a weighted sum of two tau models,
-    /// the explanation is similarly derived by blending the feature-level contributions of $\tau_t1$ and $\tau_t0$:
-    /// $Exp(x) = g(x) \cdot Exp_{\tau_t0}(x) + (1 - g(x)) \cdot Exp_{\tau_t1}(x)$
-    ///
-    /// # Returns
-    /// A matrix (n_samples x n_features) representing how much each feature contributes to the uplift score for each sample.
+    /// Explains the uplift by decomposing the feature contributions.
     pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         let (g, (exp_t1, exp_t0)) = rayon::join(
             || self.p.predict(x), // P(T=1 | X)

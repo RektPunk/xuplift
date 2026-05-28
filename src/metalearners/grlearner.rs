@@ -3,12 +3,15 @@ use rayon::prelude::*;
 
 use crate::xmodels::regressor::Regressor;
 
-/// Generalized R-Learner (GRLearner) for Uplift Modeling / Continuous Treatment.
+/// Generalized R-Learner (GR-Learner) for Uplift Modeling.
 ///
 /// This learner isolates the causal effect by residualizing both the outcome and the treatment.
 /// Unlike the standard R-Learner which uses a Classifier for binary treatment propensity,
-/// GRLearner uses a Regressor for the treatment model, making it capable of handling
+/// GR-Learner uses a Regressor for the treatment model, making it capable of handling
 /// both continuous and binary treatment variables natively.
+///
+/// # Reference
+/// * Nie, X., & Wager, S. (2021). Quasi-oracle estimation of heterogeneous treatment effects. Biometrika, 108(2), 299–319. https://doi.org/10.1093/biomet/asaa076
 pub struct GRLearner {
     /// Treatment effect model
     pub tau: Regressor,
@@ -18,12 +21,12 @@ impl GRLearner {
     /// Initializes and fits the GRLearner using the provided data.
     ///
     /// # Arguments
-    /// * `x` - The original feature matrix (n_samples x n_features).
-    /// * `t` - The treatment vector (n_samples, continuous or binary).
-    /// * `y` - The observed outcome vector.
-    /// * `mu_penalty` - The regularization penalty for the outcome model.
-    /// * `t_penalty` - The regularization penalty for the treatment model.
-    /// * `tau_penalty` - The regularization penalty for the final treatment effect model.
+    /// * `x` - Feature matrix (n_samples x n_features).
+    /// * `t` - Treatment vector (n_samples, continuous or binary).
+    /// * `y` - Outcome vector (n_samples).
+    /// * `mu_penalty` - Regularization penalty for the outcome model.
+    /// * `p_penalty` - Regularization penalty for the treatment model.
+    /// * `tau_penalty` - Regularization penalty for the treatment effect model.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
@@ -78,12 +81,12 @@ impl GRLearner {
         Self { tau }
     }
 
-    /// Estimates the uplift score: $\hat{\tau}(x)$.
+    /// Estimates the uplift score $\tau(x)$ for the given features.
     pub fn predict_uplift(&self, x: MatRef<'_, f32>) -> Col<f32> {
         self.tau.predict(x)
     }
 
-    /// Explains the uplift by decomposing the feature contributions of the tau model.
+    /// Explains the uplift by decomposing the feature contributions.
     pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         self.tau.explain(x)
     }

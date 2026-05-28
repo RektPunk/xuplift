@@ -11,7 +11,8 @@ fn test_grlearner_continuous() {
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // Synthetic Data Generation for Continuous Treatment with Linear Confounding
+    // --- Synthetic Data Generation ---
+    // Objective: Create a dataset with continuous treatment and known confounding.
     // Generative Model:
     // t = 2.0 * x0 + Noise_T
     // y = 1.5 * x0 + 0.5 * sin(x1) + (5.0 * t) + 10.0 + Noise_Y
@@ -36,13 +37,14 @@ fn test_grlearner_continuous() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0 + outcome_noise;
     }
 
-    // Initialize GRLearner. Low penalties allow exact mapping onto linear data.
+    // --- Model Initialization ---
+    // GRLearner uses regressors for both outcome and treatment models to support continuous treatment.
     let grlearner = GRLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.001, 0.001, 0.001);
 
-    // Estimate Individual Treatment Effect (ITE Slope).
+    // --- Prediction ---
     let uplift_estimate = grlearner.predict_uplift(x.as_ref());
 
-    // Verify if the average estimated uplift is close to the true effect.
+    // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -60,7 +62,7 @@ fn test_grlearner_continuous() {
         avg_uplift
     );
 
-    // Verify that the sum of feature contribution deltas matches the predicted uplift.
+    // --- Verification: Explanation Consistency ---
     let uplift_explanation = grlearner.explain_uplift(x.as_ref());
 
     // Regressor-based explanation matrix should have n_features columns.
@@ -73,7 +75,7 @@ fn test_grlearner_continuous() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // The sum of contributions + base must equal the explained uplift
+        // Reconstructed Uplift = sum(feature_contributions) + base_value
         let total_reconstructed_uplift = explained_total + base_value;
         assert!(
             (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
@@ -83,5 +85,5 @@ fn test_grlearner_continuous() {
             uplift_estimate[i]
         );
     }
-    println!("GRLearner Uplift Delta Explanation check passed!");
+    println!("GRLearner verification passed!");
 }

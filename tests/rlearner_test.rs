@@ -11,9 +11,9 @@ fn test_rlearner() {
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // Synthetic Data Generation
+    // --- Synthetic Data Generation ---
+    // Objective: Create a dataset with a known constant treatment effect.
     // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
-    // Propensity (e(x)): 0.5 (Random assignment)
     // Ground Truth Uplift (ITE): 5.0
     for i in 0..n_samples {
         let x0 = i as f32 * 0.01;
@@ -32,13 +32,14 @@ fn test_rlearner() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
+    // --- Model Initialization ---
     // R-Learner trains: m(x) [Outcome], e(x) [Propensity], and tau(x) [Residual-on-Residual]
     let rlearner = RLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
 
-    // Estimate Individual Treatment Effect (ITE).
+    // --- Prediction ---
     let uplift_estimate = rlearner.predict_uplift(x.as_ref());
 
-    // Verify if the average estimated uplift is close to the true effect.
+    // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -56,8 +57,7 @@ fn test_rlearner() {
         avg_uplift
     );
 
-    // Verify Mathematical Explanation Consistency
-    // Predict(x) should be approximately (sum of feature contributions + base_value).
+    // --- Verification: Explanation Consistency ---
     let uplift_explanation = rlearner.explain_uplift(x.as_ref());
 
     // R-Learner's explanation matrix should have n_features columns.
@@ -69,7 +69,7 @@ fn test_rlearner() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // The sum of contributions + base must equal the explained uplift
+        // Reconstructed Uplift = sum(feature_contributions) + base_value
         let reconstructed_uplift = explained_total + rlearner.tau.base_value;
         assert!(
             (reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
@@ -79,5 +79,5 @@ fn test_rlearner() {
             uplift_estimate[i]
         );
     }
-    println!("RLearner Residual Explanation check passed!");
+    println!("RLearner verification passed!");
 }

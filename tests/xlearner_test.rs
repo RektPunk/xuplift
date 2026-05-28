@@ -11,7 +11,7 @@ fn test_xlearner() {
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // Synthetic Data Generation with Imbalance
+    // --- Synthetic Data Generation ---
     // Objective: Simulate a scenario where Treatment (T=1) is rare.
     // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
     // Ground Truth Uplift (ITE): 5.0
@@ -33,14 +33,15 @@ fn test_xlearner() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
+    // --- Model Initialization ---
     // X-Learner internally trains 5 models:
     // Stage 1: mu_1, mu_0 | Stage 2: tau_1, tau_0 | Stage 3: p (propensity)
     let xlearner = XLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
 
-    // Estimate Individual Treatment Effect (ITE): g(x)*tau_0 + (1-g(x))*tau_1
+    // --- Prediction ---
     let uplift_estimate = xlearner.predict_uplift(x.as_ref());
 
-    // Verify if the average estimated uplift is close to the true effect.
+    // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -58,7 +59,7 @@ fn test_xlearner() {
         avg_uplift
     );
 
-    // Verify Mathematical Explanation Consistency
+    // --- Verification: Explanation Consistency ---
     // In X-Learner, the explanation must account for the dynamic base value
     // caused by the propensity-weighted blending of two models.
     let uplift_explanation = xlearner.explain_uplift(x.as_ref());
@@ -74,12 +75,12 @@ fn test_xlearner() {
             feature_contribution_sum += uplift_explanation[(i, j)];
         }
 
-        // Calculate Dynamic Base Value: g(x)*base_tau0 + (1-g(x))*base_tau1
+        // Reconstructed Uplift = sum(weighted_feature_contributions) + dynamic_base_value
+        // Dynamic Base Value: g(x)*base_tau0 + (1-g(x))*base_tau1
         let gi = propensity[i].clamp(0.01, 0.99);
         let dynamic_base =
             gi * xlearner.tau_t0.base_value + (1.0 - gi) * xlearner.tau_t1.base_value;
 
-        // The sum of weighted contributions + weighted base must equal the uplift estimate for each sample.
         let reconstructed_uplift = feature_contribution_sum + dynamic_base;
         assert!(
             (reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
@@ -89,5 +90,5 @@ fn test_xlearner() {
             uplift_estimate[i]
         );
     }
-    println!("XLearner Uplift Delta Explanation check passed!");
+    println!("XLearner verification passed!");
 }

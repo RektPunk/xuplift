@@ -11,6 +11,9 @@ use crate::xmodels::regressor::Regressor;
 /// 3. Construct a doubly robust pseudo-outcome ($Y_{dr}$):
 ///    $$Y_{dr} = \mu_1(x) - \mu_0(x) + \frac{T(Y - \mu_1(x))}{e(x)} - \frac{(1 - T)(Y - \mu_0(x))}{1 - e(x)}$$
 /// 4. Train a single model $\tau(x)$ on the full feature matrix to predict $Y_{dr}$.
+///
+/// # Reference
+/// * Kennedy, E. H. (2023). Towards optimal doubly robust estimation of heterogeneous causal effects. Electronic Journal of Statistics, 17(2), 3008–3049. https://doi.org/10.1214/23-EJS2157
 pub struct DRLearner {
     /// Treatment effect model
     pub tau: Regressor,
@@ -20,13 +23,13 @@ impl DRLearner {
     /// Initializes and fits the DRLearner using the provided data.
     ///
     /// # Arguments
-    /// * `x` - The original feature matrix (n_samples x n_features).
-    /// * `t` - The treatment assignment vector (n_samples, 0 or 1).
-    /// * `y` - The observed outcome vector.
-    /// * `mu_penalty` - The regularization penalty for the base outcome regressors.
-    /// * `p_penalty` - The regularization penalty for the propensity classifier.
-    /// * `p_max_iter` - The maximum number of iterations for the propensity classifier.
-    /// * `tau_penalty` - The regularization penalty for the treatment effect model.
+    /// * `x` - Feature matrix (n_samples x n_features).
+    /// * `t` - Treatment vector (n_samples).
+    /// * `y` - Outcome vector (n_samples).
+    /// * `mu_penalty` - Regularization penalty for the outcome models.
+    /// * `p_penalty` - Regularization penalty for the propensity model.
+    /// * `p_max_iter` - Maximum iterations for the propensity model solver.
+    /// * `tau_penalty` - Regularization penalty for the treatment effect model.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
@@ -92,12 +95,12 @@ impl DRLearner {
         Self { tau }
     }
 
-    /// Estimates the uplift score: $\hat{\tau}(x)$.
+    /// Estimates the uplift score $\tau(x)$ for the given features.
     pub fn predict_uplift(&self, x: MatRef<'_, f32>) -> Col<f32> {
         self.tau.predict(x)
     }
 
-    /// Explains the uplift by decomposing the feature contributions of the DR tau model.
+    /// Explains the uplift by decomposing the feature contributions.
     pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         self.tau.explain(x)
     }

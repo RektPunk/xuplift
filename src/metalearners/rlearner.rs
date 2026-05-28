@@ -4,12 +4,15 @@ use rayon::prelude::*;
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
 
-/// R-Learner for Uplift Modeling.
+/// R-Learner (Residual Learner) for Uplift Modeling.
 ///
 /// This learner focuses on the residual-on-residual regression.
 /// It first trains an outcome model $m(x) = E[Y|X]$ and a propensity model $e(x) = E[T|X]$.
 /// The treatment effect $\tau(x)$ is then estimated by minimizing the R-objective:
 /// $$\min_{\tau} \sum_{i=1}^n [ (y_i - m(x_i)) - (t_i - e(x_i)) \tau(x_i) ]^2$$
+///
+/// # Reference
+/// * Nie, X., & Wager, S. (2021). Quasi-oracle estimation of heterogeneous treatment effects. Biometrika, 108(2), 299–319. https://doi.org/10.1093/biomet/asaa076
 pub struct RLearner {
     /// Treatment effect model
     pub tau: Regressor,
@@ -19,13 +22,13 @@ impl RLearner {
     /// Initializes and fits the RLearner using the provided data.
     ///
     /// # Arguments
-    /// * `x` - The original feature matrix (n_samples x n_features).
-    /// * `t` - The treatment assignment vector (n_samples, 0 or 1).
-    /// * `y` - The observed outcome vector.
-    /// * `mu_penalty` - The regularization penalty for the regressor.
-    /// * `p_penalty` - The regularization penalty for the propensity model.
-    /// * `p_max_iter` - The maximum number of iterations for the propensity model.
-    /// * `tau_penalty` - The regularization penalty for the treatment effect model.
+    /// * `x` - Feature matrix (n_samples x n_features).
+    /// * `t` - Treatment vector (n_samples).
+    /// * `y` - Outcome vector (n_samples).
+    /// * `mu_penalty` - Regularization penalty for the outcome model.
+    /// * `p_penalty` - Regularization penalty for the propensity model.
+    /// * `p_max_iter` - Maximum iterations for the propensity model solver.
+    /// * `tau_penalty` - Regularization penalty for the treatment effect model.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
@@ -81,13 +84,12 @@ impl RLearner {
         Self { tau }
     }
 
-    /// Estimates the uplift score: $\hat{\tau}(x) = \arg\min_{\tau} \sum [ (Y - m(x)) - (T - e(x)) \cdot \tau(x) ]^2$
-    /// directly using the tau model.
+    /// Estimates the uplift score $\tau(x)$ for the given features.
     pub fn predict_uplift(&self, x: MatRef<'_, f32>) -> Col<f32> {
         self.tau.predict(x)
     }
 
-    /// Explains the uplift by decomposing the feature contributions of the tau model.
+    /// Explains the uplift by decomposing the feature contributions.
     pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         self.tau.explain(x)
     }

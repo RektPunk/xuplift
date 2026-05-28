@@ -11,7 +11,7 @@ fn test_slearner() {
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // Synthetic Data Generation
+    // --- Synthetic Data Generation ---
     // Objective: Create a dataset with a known constant treatment effect.
     // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
     // Ground Truth Uplift (ITE): 5.0
@@ -30,13 +30,13 @@ fn test_slearner() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
-    // Initialize SLearner which internally handles feature augmentation and kernel mapping.
+    // --- Model Initialization ---
     let slearner = SLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.01);
 
-    // Estimate Individual Treatment Effect (ITE).
+    // --- Prediction ---
     let uplift_estimate = slearner.predict_uplift(x.as_ref());
 
-    // Verify if the average estimated uplift is close to the true effect.
+    // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -54,10 +54,10 @@ fn test_slearner() {
         avg_uplift
     );
 
-    // Verify that the sum of feature contribution deltas matches the predicted uplift.
+    // --- Verification: Explanation Consistency ---
     let uplift_explanation = slearner.explain_uplift(x.as_ref());
 
-    // S-Learner's explanation matrix should have n_features + 1 columns.
+    // S-Learner's explanation matrix should have n_features + 1 columns (X + T).
     assert_eq!(uplift_explanation.ncols(), n_features + 1);
 
     for i in 0..x.nrows() {
@@ -66,7 +66,7 @@ fn test_slearner() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // The sum of contributions must equal the explained uplift for each sample.
+        // For S-Learner, sum(contributions) should equal the predicted uplift.
         assert!(
             (explained_total - uplift_estimate[i]).abs() < 1e-4,
             "Uplift explanation delta mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
@@ -75,5 +75,5 @@ fn test_slearner() {
             uplift_estimate[i]
         );
     }
-    println!("SLearner Uplift Delta Explanation check passed!");
+    println!("SLearner verification passed!");
 }
