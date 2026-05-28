@@ -37,7 +37,7 @@ impl SLearner {
             .submatrix_mut(0, 0, num_rows, num_cols)
             .copy_from(x);
 
-        // Append the treatment vector T as the final column
+        // Append the treatment vector T as the column
         x_combined.as_mut().col_mut(num_cols).copy_from(t);
 
         // Initialize and fit the Regressor using the augmented features

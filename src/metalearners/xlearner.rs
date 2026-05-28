@@ -115,7 +115,7 @@ impl XLearner {
     /// $Exp(x) = g(x) \cdot Exp_{\tau_t0}(x) + (1 - g(x)) \cdot Exp_{\tau_t1}(x)$
     ///
     /// # Returns
-    /// A matrix (n_samples x n_features) representing how much each feature contributes to the final uplift score for each sample.
+    /// A matrix (n_samples x n_features) representing how much each feature contributes to the uplift score for each sample.
     pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         let (g, (exp_t1, exp_t0)) = rayon::join(
             || self.p.predict(x), // P(T=1 | X)

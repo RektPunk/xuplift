@@ -74,7 +74,7 @@ impl RLearner {
         let r_target_col = Col::<f32>::from_fn(num_rows, |i| r_target[i]);
         let r_weights_col = Col::<f32>::from_fn(num_rows, |i| r_weights[i]);
 
-        // Train the final tau model on the R-objective target with weights
+        // Train the tau model on the R-objective target with weights
         let mut tau = Regressor::new(tau_penalty);
         tau.fit_weighted(x, r_target_col.as_ref(), &r_weights_col);
 
@@ -86,17 +86,7 @@ impl RLearner {
         self.tau.predict(x)
     }
 
-    /// Explains the uplift by decomposing the feature contributions of the tau model.
-    ///
-    /// This explanation reveals how each feature contributes to the *change* in outcome
-    /// caused by the treatment, rather than the outcome itself.
-    ///
-    /// Because R-Learner isolates the treatment signal by subtracting baseline expectations ($m(x)$ and $e(x)$),
-    /// the feature contributions here are uniquely focused on "Causal Interaction" rather than simple correlation.
-    ///
-    /// # Returns
-    /// A matrix (n_samples x n_features) showing the attribution of each feature
-    /// to the final estimated Treatment Effect.
+    /// Explains the uplift by decomposing the feature contributions of the single model.
     pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         self.tau.explain(x)
     }

@@ -17,7 +17,7 @@ impl MLearner {
     /// * `x` - The original feature matrix (n_samples x n_features).
     /// * `t` - The treatment assignment vector (n_samples, 0 or 1).
     /// * `y` - The observed outcome vector.
-    /// * `tau_penalty` - The regularization penalty for the final single model.
+    /// * `tau_penalty` - The regularization penalty for the single model.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
@@ -45,9 +45,6 @@ impl MLearner {
     }
 
     /// Explains the uplift by decomposing the feature contributions of the single model.
-    ///
-    /// Since the target transformation isolates the causal effect within a single variable,
-    /// the feature attributions can be directly extracted from the underlying model.
     pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         self.tau.explain(x)
     }

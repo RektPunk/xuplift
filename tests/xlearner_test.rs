@@ -79,9 +79,8 @@ fn test_xlearner() {
         let dynamic_base =
             gi * xlearner.tau_t0.base_value + (1.0 - gi) * xlearner.tau_t1.base_value;
 
-        let reconstructed_uplift = feature_contribution_sum + dynamic_base;
-
         // The sum of weighted contributions + weighted base must equal the uplift estimate for each sample.
+        let reconstructed_uplift = feature_contribution_sum + dynamic_base;
         assert!(
             (reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
             "X-Learner explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",

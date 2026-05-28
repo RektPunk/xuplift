@@ -9,6 +9,7 @@ pub use crate::xmodels::regressor::Regressor;
 
 pub use crate::metalearners::drlearner::DRLearner;
 pub use crate::metalearners::mlearner::MLearner;
+pub use crate::metalearners::pwlearner::PWLearner;
 pub use crate::metalearners::rlearner::RLearner;
 pub use crate::metalearners::slearner::SLearner;
 pub use crate::metalearners::tlearner::TLearner;
@@ -210,6 +211,12 @@ impl_py_learner!(
     "MLearner", PyMLearner, MLearner,
     (tau_penalty: f32),
     (tau_penalty)
+);
+
+impl_py_learner!(
+    "PWLearner", PyPWLearner, PWLearner,
+    (p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
+    (p_penalty, p_max_iter, tau_penalty)
 );
 
 impl_py_learner!(

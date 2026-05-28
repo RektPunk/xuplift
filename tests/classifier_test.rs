@@ -10,7 +10,7 @@ fn test_gaussian_classification() {
     let mut rng = rand::rng();
     let n_samples = 500;
     let n_features = 2;
-    let penalty = 0.01;
+
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
     let mut y = Col::<f32>::zeros(n_samples);
 
@@ -37,7 +37,7 @@ fn test_gaussian_classification() {
     }
 
     // Setup and Fit Classifier (IRLS)
-    let mut model = Classifier::new(penalty, 20); // Perform 20 iterations for convergence
+    let mut model = Classifier::new(0.1, 10); // Perform 10 iterations for convergence
     model.fit(x.as_ref(), y.as_ref());
 
     // Verify Accuracy
@@ -102,7 +102,7 @@ fn test_classifier_with_nans() {
         y[i] = if i < n_samples / 2 { 0.0 } else { 1.0 };
     }
 
-    let mut model = Classifier::new(0.01, 5);
+    let mut model = Classifier::new(0.1, 10);
     model.fit(x.as_ref(), y.as_ref());
 
     // Check if predictions for NaN rows are still returning values

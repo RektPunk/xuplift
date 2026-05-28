@@ -44,7 +44,7 @@ fn test_regression() {
 
     // Verify Explanation Consistency
     // The sum of individual feature contributions plus the model's base value (intercept)
-    // must exactly equal the final predicted value for every sample.
+    // must exactly equal the predicted value for every sample.
     let explanation = model.explain(x.as_ref());
 
     // Verify dimensions: rows must match samples, columns must match input features.
