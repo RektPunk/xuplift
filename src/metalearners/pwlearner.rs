@@ -1,5 +1,4 @@
 use faer::{Col, ColRef, Mat, MatRef};
-use rayon::prelude::*;
 
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
@@ -43,18 +42,14 @@ impl PWLearner {
 
         // Construct pseudo-outcomes in parallel
         // Y* = Y * [T / e(x) - (1-T) / (1-e(x))]
-        let y_pw_vec: Vec<f32> = (0..num_rows)
-            .into_par_iter()
-            .map(|i| {
-                let gi = p_pred[i].clamp(0.01, 0.99); // Prevent division by zero
-                if t[i] > 0.5 {
-                    y[i] / gi
-                } else {
-                    -y[i] / (1.0 - gi)
-                }
-            })
-            .collect();
-        let y_pw = Col::from_fn(num_rows, |i| y_pw_vec[i]);
+        let y_pw = Col::from_fn(num_rows, |i| {
+            let gi = p_pred[i].clamp(0.01, 0.99); // Prevent division by zero
+            if t[i] > 0.5 {
+                y[i] / gi
+            } else {
+                -y[i] / (1.0 - gi)
+            }
+        });
 
         // Fit model on pseudo-outcomes
         let mut tau = Regressor::new(tau_penalty);

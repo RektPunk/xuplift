@@ -1,5 +1,4 @@
 use faer::{Col, ColRef, Mat, MatRef};
-use rayon::prelude::*;
 
 use crate::xmodels::regressor::Regressor;
 
@@ -52,26 +51,22 @@ impl GRLearner {
         );
 
         // Compute residuals and weighted targets
-        let (r_target, r_weights): (Vec<f32>, Vec<f32>) = (0..num_rows)
-            .into_par_iter()
-            .map(|i| {
-                let y_tilde = y[i] - mu_pred[i];
-                let t_tilde = t[i] - p_pred[i];
+        // Objective: Minimize (y_tilde - t_tilde * tau)^2
+        // Equivalent to Weighted Least Squares: Minimize sum( w_i * (target_i - tau)^2 )
+        let r_target_col = Col::<f32>::from_fn(num_rows, |i| {
+            let y_tilde = y[i] - mu_pred[i];
+            let t_tilde = t[i] - p_pred[i];
+            if t_tilde.abs() > 1e-6 {
+                y_tilde / t_tilde
+            } else {
+                0.0
+            }
+        });
 
-                // Objective: Minimize (y_tilde - t_tilde * tau)^2
-                // Equivalent to Weighted Least Squares: Minimize sum( w_i * (target_i - tau)^2 )
-                let weight = t_tilde * t_tilde;
-                let target = if t_tilde.abs() > 1e-5 {
-                    y_tilde / t_tilde
-                } else {
-                    0.0
-                };
-                (target, weight)
-            })
-            .unzip();
-
-        let r_target_col = Col::<f32>::from_fn(num_rows, |i| r_target[i]);
-        let r_weights_col = Col::<f32>::from_fn(num_rows, |i| r_weights[i]);
+        let r_weights_col = Col::<f32>::from_fn(num_rows, |i| {
+            let t_tilde = t[i] - p_pred[i];
+            t_tilde * t_tilde
+        });
 
         // Fit model on weighted targets
         let mut tau = Regressor::new(tau_penalty);

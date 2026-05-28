@@ -3,7 +3,7 @@ use faer::{Col, Mat};
 use xuplift::metalearners::grlearner::GRLearner;
 
 #[test]
-fn test_grlearner_continuous() {
+fn test_grlearner() {
     let n_samples = 500;
     let n_features = 3;
 

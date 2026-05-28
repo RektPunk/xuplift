@@ -1,6 +1,6 @@
-use crate::xmodels::regressor::Regressor;
 use faer::{Col, ColRef, Mat, MatRef};
-use rayon::prelude::*;
+
+use crate::xmodels::regressor::Regressor;
 
 /// M-Learner (Modified Covariates Learner) for Uplift Modeling.
 ///
@@ -31,15 +31,10 @@ impl MLearner {
         let num_rows = x.nrows();
 
         // Target Transformation: Y* = 2 * Y * (2T - 1)
-        // Construct pseudo-outcomes in parallel
-        let y_m_vec: Vec<f32> = (0..num_rows)
-            .into_par_iter()
-            .map(|i| {
-                let sign = if t[i] > 0.5 { 1.0 } else { -1.0 };
-                2.0 * y[i] * sign
-            })
-            .collect();
-        let y_m = Col::from_fn(num_rows, |i| y_m_vec[i]);
+        let y_m = Col::from_fn(num_rows, |i| {
+            let sign = if t[i] > 0.5 { 1.0 } else { -1.0 };
+            2.0 * y[i] * sign
+        });
 
         // Fit Regressor on pseudo-outcomes
         let mut tau = Regressor::new(tau_penalty);
