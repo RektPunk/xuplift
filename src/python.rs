@@ -7,6 +7,7 @@ pub use crate::feature_map::KernelFeatureMap;
 pub use crate::xmodels::classifier::Classifier;
 pub use crate::xmodels::regressor::Regressor;
 
+pub use crate::metalearners::drlearner::DRLearner;
 pub use crate::metalearners::rlearner::RLearner;
 pub use crate::metalearners::slearner::SLearner;
 pub use crate::metalearners::tlearner::TLearner;
@@ -158,6 +159,56 @@ impl PyRegressor {
         x: PyReadonlyArray2<f32>,
     ) -> PyResult<Bound<'py, PyArray2<f32>>> {
         let explanation = self.inner.explain(x.into_faer());
+        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
+        Ok(py_expl)
+    }
+}
+
+#[pyclass(name = "DRLearner")]
+pub struct PyDRLearner {
+    inner: DRLearner,
+}
+#[pymethods]
+impl PyDRLearner {
+    #[new]
+    fn new(
+        x: PyReadonlyArray2<f32>,
+        t: PyReadonlyArray1<f32>,
+        y: PyReadonlyArray1<f32>,
+        mu_penalty: f32,
+        p_penalty: f32,
+        p_max_iter: usize,
+        tau_penalty: f32,
+    ) -> Self {
+        let (x_mat, t_col, y_col) = prepare_input(x, t, y);
+        let model = DRLearner::new(
+            x_mat,
+            t_col,
+            y_col,
+            mu_penalty,
+            p_penalty,
+            p_max_iter,
+            tau_penalty,
+        );
+        PyDRLearner { inner: model }
+    }
+
+    fn predict_uplift<'py>(
+        &self,
+        py: Python<'py>,
+        x: PyReadonlyArray2<f32>,
+    ) -> PyResult<Bound<'py, PyArray1<f32>>> {
+        let uplift = self.inner.predict_uplift(x.into_faer());
+        let py_pred = uplift.as_ref().into_ndarray().to_pyarray(py);
+        Ok(py_pred)
+    }
+
+    fn explain_uplift<'py>(
+        &self,
+        py: Python<'py>,
+        x: PyReadonlyArray2<f32>,
+    ) -> PyResult<Bound<'py, PyArray2<f32>>> {
+        let explanation = self.inner.explain_uplift(x.into_faer());
         let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
         Ok(py_expl)
     }

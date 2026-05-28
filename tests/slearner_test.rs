@@ -54,17 +54,19 @@ fn test_slearner() {
         avg_uplift
     );
 
-    // Verify Mathematical Explanation Consistency
     // Verify that the sum of feature contribution deltas matches the predicted uplift.
-    // Mathematical Consistency: \sum(Contribution_T1 - Contribution_T0) == Predict_T1 - Predict_T0
     let uplift_explanation = slearner.explain_uplift(x.as_ref());
+
+    // S-Learner's explanation matrix should have n_features + 1 columns.
+    assert_eq!(uplift_explanation.ncols(), n_features + 1);
+
     for i in 0..x.nrows() {
         let mut explained_total = 0.0;
         for j in 0..uplift_explanation.ncols() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // The total explained uplift must match the actual prediction score for each sample.
+        // The sum of contributions must equal the explained uplift for each sample.
         assert!(
             (explained_total - uplift_estimate[i]).abs() < 1e-4,
             "Uplift explanation delta mismatch at sample {}: Explained {:.4}, Predicted {:.4}",

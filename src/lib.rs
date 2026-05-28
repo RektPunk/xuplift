@@ -6,6 +6,7 @@ pub mod python;
 pub mod xmodels;
 
 pub use crate::feature_map::KernelFeatureMap;
+pub use crate::metalearners::drlearner::DRLearner;
 pub use crate::metalearners::rlearner::RLearner;
 pub use crate::metalearners::slearner::SLearner;
 pub use crate::metalearners::tlearner::TLearner;
@@ -18,6 +19,7 @@ fn xuplift(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<python::PyClassifier>()?;
     m.add_class::<python::PyRegressor>()?;
 
+    m.add_class::<python::PyDRLearner>()?;
     m.add_class::<python::PyRLearner>()?;
     m.add_class::<python::PySLearner>()?;
     m.add_class::<python::PyTLearner>()?;

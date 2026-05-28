@@ -61,7 +61,7 @@ fn test_tlearner() {
     // Mathematical Consistency: Σ(Contribution_T1 - Contribution_T0) == Predict_T1 - Predict_T0
     let uplift_explanation = tlearner.explain_uplift(x.as_ref());
 
-    // T-Learner's explanation matrix should have n_features columns (no T column).
+    // T-Learner's explanation matrix should have n_features columns.
     assert_eq!(uplift_explanation.ncols(), n_features);
 
     for i in 0..x.nrows() {
@@ -70,10 +70,9 @@ fn test_tlearner() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // We must also account for the difference in base_values (intercepts) between the two independent models.
+        // The sum of contributions must equal the explained uplift + base value difference for each sample.
         let base_value_diff = tlearner.mu_t1.base_value - tlearner.mu_t0.base_value;
         let total_reconstructed_uplift = explained_total + base_value_diff;
-
         assert!(
             (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
             "Uplift explanation delta mismatch at sample {}: Explained {:.4}, Predicted {:.4}",

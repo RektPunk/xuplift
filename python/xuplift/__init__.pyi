@@ -13,6 +13,20 @@ class Regressor:
     def predict(self, x: NDArray[np.float32]) -> NDArray[np.float32]: ...
     def explain(self, x: NDArray[np.float32]) -> NDArray[np.float32]: ...
 
+class DRLearner:
+    def __init__(
+        self,
+        x: NDArray[np.float32],
+        t: NDArray[np.float32],
+        y: NDArray[np.float32],
+        mu_penalty: float,
+        p_penalty: float,
+        p_max_iter: int,
+        tau_penalty: float,
+    ) -> None: ...
+    def predict_uplift(self, x: NDArray[np.float32]) -> NDArray[np.float32]: ...
+    def explain_uplift(self, x: NDArray[np.float32]) -> NDArray[np.float32]: ...
+
 class RLearner:
     def __init__(
         self,

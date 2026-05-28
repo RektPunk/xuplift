@@ -57,9 +57,11 @@ fn test_rlearner() {
     );
 
     // Verify Mathematical Explanation Consistency
-    // For R-Learner, the explanation logic is simpler because it's a single Stage-2 model.
     // Predict(x) should be approximately (sum of feature contributions + base_value).
     let uplift_explanation = rlearner.explain_uplift(x.as_ref());
+
+    // R-Learner's explanation matrix should have n_features columns.
+    assert_eq!(uplift_explanation.ncols(), n_features);
 
     for i in 0..x.nrows() {
         let mut explained_total = 0.0;
@@ -67,9 +69,8 @@ fn test_rlearner() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // R-Learner's prediction is derived from its internal tau regressor.
+        // The sum of contributions + base must equal the explained uplift
         let reconstructed_uplift = explained_total + rlearner.tau.base_value;
-
         assert!(
             (reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
             "R-Learner explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",

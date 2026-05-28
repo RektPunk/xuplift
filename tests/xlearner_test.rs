@@ -62,6 +62,10 @@ fn test_xlearner() {
     // In X-Learner, the explanation must account for the dynamic base value
     // caused by the propensity-weighted blending of two models.
     let uplift_explanation = xlearner.explain_uplift(x.as_ref());
+
+    // X-Learner's explanation matrix should have n_features columns.
+    assert_eq!(uplift_explanation.ncols(), n_features);
+
     let propensity = xlearner.p.predict(x.as_ref());
 
     for i in 0..x.nrows() {
@@ -77,7 +81,7 @@ fn test_xlearner() {
 
         let reconstructed_uplift = feature_contribution_sum + dynamic_base;
 
-        // The sum of weighted contributions + weighted base must equal the prediction
+        // The sum of weighted contributions + weighted base must equal the uplift estimate for each sample.
         assert!(
             (reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
             "X-Learner explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
