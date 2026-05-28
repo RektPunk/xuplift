@@ -6,7 +6,7 @@ use faer::{Col, ColRef, Mat, MatRef};
 /// This learner transforms the target variable to isolate the causal effect in a single step,
 /// assuming a randomized controlled trial (RCT) environment where the propensity score is 0.5.
 pub struct MLearner {
-    /// Single regression model trained on the modified target
+    /// Treatment effect model
     pub tau: Regressor,
 }
 
@@ -32,19 +32,19 @@ impl MLearner {
             2.0 * y[i] * sign
         });
 
-        // Train a single tau model directly on the modified target
+        // Train the tau model on the modified target
         let mut tau = Regressor::new(tau_penalty);
         tau.fit(x, y_star.as_ref());
 
         Self { tau }
     }
 
-    /// Estimates the uplift score $\hat{\tau}(x)$ directly using the single modified model.
+    /// Estimates the uplift score $\hat{\tau}(x)$ directly using the tau model.
     pub fn predict_uplift(&self, x: MatRef<'_, f32>) -> Col<f32> {
         self.tau.predict(x)
     }
 
-    /// Explains the uplift by decomposing the feature contributions of the single model.
+    /// Explains the uplift by decomposing the feature contributions of the tau model.
     pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         self.tau.explain(x)
     }

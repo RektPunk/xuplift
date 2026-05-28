@@ -32,11 +32,9 @@ impl PWLearner {
     ) -> Self {
         let num_rows = x.nrows();
 
-        // Fit propensity score model
+        // Fit and predict propensity score model
         let mut p = Classifier::new(p_penalty, p_max_iter);
         p.fit(x, t);
-
-        // Predict propensity scores
         let p_pred = p.predict(x);
 
         // Construct Inverse Probability Weighted Pseudo-Outcomes

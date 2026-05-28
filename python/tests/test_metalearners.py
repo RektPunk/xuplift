@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from xuplift import (
     DRLearner,
+    GRLearner,
     MLearner,
     PWLearner,
     RLearner,
@@ -30,6 +31,17 @@ def test_drlearner(uplift_data):
     model = DRLearner(
         x, t, y, mu_penalty=0.1, p_penalty=0.1, p_max_iter=10, tau_penalty=0.1
     )
+
+    ite = model.predict_uplift(x)
+    assert ite.shape == (x.shape[0],)
+
+    explanation = model.explain_uplift(x)
+    assert explanation.shape == (x.shape[0], x.shape[1])
+
+
+def test_grlearner(uplift_data):
+    x, t, y = uplift_data
+    model = GRLearner(x, t, y, mu_penalty=0.1, p_penalty=0.1, tau_penalty=0.1)
 
     ite = model.predict_uplift(x)
     assert ite.shape == (x.shape[0],)

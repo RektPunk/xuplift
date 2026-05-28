@@ -8,6 +8,7 @@ pub use crate::xmodels::classifier::Classifier;
 pub use crate::xmodels::regressor::Regressor;
 
 pub use crate::metalearners::drlearner::DRLearner;
+pub use crate::metalearners::grlearner::GRLearner;
 pub use crate::metalearners::mlearner::MLearner;
 pub use crate::metalearners::pwlearner::PWLearner;
 pub use crate::metalearners::rlearner::RLearner;
@@ -205,6 +206,12 @@ impl_py_learner!(
     "DRLearner", PyDRLearner, DRLearner,
     (mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
     (mu_penalty, p_penalty, p_max_iter, tau_penalty)
+);
+
+impl_py_learner!(
+    "GRLearner", PyGRLearner, GRLearner,
+    (mu_penalty: f32, p_penalty: f32, tau_penalty: f32),
+    (mu_penalty, p_penalty, tau_penalty)
 );
 
 impl_py_learner!(

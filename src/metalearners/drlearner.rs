@@ -12,7 +12,7 @@ use crate::xmodels::regressor::Regressor;
 ///    $$Y_{dr} = \mu_1(x) - \mu_0(x) + \frac{T(Y - \mu_1(x))}{e(x)} - \frac{(1 - T)(Y - \mu_0(x))}{1 - e(x)}$$
 /// 4. Train a single model $\tau(x)$ on the full feature matrix to predict $Y_{dr}$.
 pub struct DRLearner {
-    /// Treatment effect model trained on doubly robust pseudo-outcomes
+    /// Treatment effect model
     pub tau: Regressor,
 }
 
@@ -85,14 +85,14 @@ impl DRLearner {
             }
         });
 
-        // Train the single tau model on the DR target
+        // Train the tau model on the DR target
         let mut tau = Regressor::new(tau_penalty);
         tau.fit(x, y_dr.as_ref());
 
         Self { tau }
     }
 
-    /// Estimates the uplift score: $\hat{\tau}(x)$ directly using the single DR model.
+    /// Estimates the uplift score: $\hat{\tau}(x)$.
     pub fn predict_uplift(&self, x: MatRef<'_, f32>) -> Col<f32> {
         self.tau.predict(x)
     }
