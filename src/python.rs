@@ -8,6 +8,7 @@ pub use crate::xmodels::classifier::Classifier;
 pub use crate::xmodels::regressor::Regressor;
 
 pub use crate::metalearners::drlearner::DRLearner;
+pub use crate::metalearners::mlearner::MLearner;
 pub use crate::metalearners::rlearner::RLearner;
 pub use crate::metalearners::slearner::SLearner;
 pub use crate::metalearners::tlearner::TLearner;
@@ -25,7 +26,6 @@ pub trait IntoNdarray {
     fn into_ndarray(self) -> Self::Ndarray;
 }
 
-// Implementations for `numpy` -> `faer` conversions
 impl<'a, T: numpy::Element + 'a> IntoFaer for PyReadonlyArray2<'a, T> {
     type Faer = MatRef<'a, T>;
 
@@ -51,7 +51,6 @@ impl<'a, T: numpy::Element + 'a> IntoFaer for PyReadonlyArray1<'a, T> {
     }
 }
 
-// Implementations for `faer` -> `numpy` conversions
 impl<'a, T> IntoNdarray for MatRef<'a, T> {
     type Ndarray = ArrayView2<'a, T>;
 
@@ -81,313 +80,158 @@ impl<'a, T> IntoNdarray for ColRef<'a, T> {
     }
 }
 
-/// Helper function to prepare multiple inputs (X, T, Y) from Python into `faer` types.
-fn prepare_input<'a>(
-    x: PyReadonlyArray2<'a, f32>,
-    t: PyReadonlyArray1<'a, f32>,
-    y: PyReadonlyArray1<'a, f32>,
-) -> (MatRef<'a, f32>, ColRef<'a, f32>, ColRef<'a, f32>) {
-    (x.into_faer(), t.into_faer(), y.into_faer())
+/// Macro to generate Python bindings for kernel based machine learning models.
+///
+/// This macro automates the boilerplate for creating the Python class wrapper,
+/// the constructor with dynamic arguments, and standard methods such as `fit`, `predict`, and `explain`.
+macro_rules! impl_py_xmodels {
+    (
+        $py_name:literal,
+        $struct_name:ident,
+        $inner_name:ident,
+        ( $($args:ident : $types:ty),* ),
+        ( $($pass_args:ident),* )
+    ) => {
+        #[pyclass(name = $py_name)]
+        pub struct $struct_name {
+            inner: $inner_name,
+        }
+
+        #[pymethods]
+        impl $struct_name {
+            #[new]
+            fn new($($args : $types),*) -> Self {
+                let model = $inner_name::new($($pass_args),*);
+                Self { inner: model }
+            }
+
+            fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
+                self.inner.fit(x.into_faer(), y.into_faer());
+            }
+
+            fn predict<'py>(
+                &self,
+                py: Python<'py>,
+                x: PyReadonlyArray2<f32>,
+            ) -> PyResult<Bound<'py, PyArray1<f32>>> {
+                let pred = self.inner.predict(x.into_faer());
+                let py_pred = pred.as_ref().into_ndarray().to_pyarray(py);
+                Ok(py_pred)
+            }
+
+            fn explain<'py>(
+                &self,
+                py: Python<'py>,
+                x: PyReadonlyArray2<f32>,
+            ) -> PyResult<Bound<'py, PyArray2<f32>>> {
+                let explanation = self.inner.explain(x.into_faer());
+                let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
+                Ok(py_expl)
+            }
+
+
+        }
+    };
 }
 
-#[pyclass(name = "Classifier")]
-pub struct PyClassifier {
-    inner: Classifier,
-}
-#[pymethods]
-impl PyClassifier {
-    #[new]
-    fn new(penalty: f32, max_iter: usize) -> Self {
-        let classifier = Classifier::new(penalty, max_iter);
-        PyClassifier { inner: classifier }
-    }
+/// Macro to generate Python bindings for Causal Inference Metalearners.
+///
+/// This macro boilerplate-generates the Python wrapper class,
+/// handling inputs `x` (features), `t` (treatment), and `y` (outcome) along with learner-specific penalty parameters.
+/// It exposes `predict_uplift` and `explain_uplift` to the Python runtime.
+macro_rules! impl_py_learner {
+    (
+        $py_name:literal,
+        $struct_name:ident,
+        $inner_name:ident,
+        ( $($args:ident : $types:ty),* ),
+        ( $($pass_args:ident),* )
+    ) => {
+        #[pyclass(name = $py_name)]
+        pub struct $struct_name {
+            inner: $inner_name,
+        }
 
-    fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
-        self.inner.fit(x.into_faer(), y.into_faer());
-    }
+        #[pymethods]
+        impl $struct_name {
+            #[new]
+            fn new(
+                x: PyReadonlyArray2<f32>,
+                t: PyReadonlyArray1<f32>,
+                y: PyReadonlyArray1<f32>,
+                $($args : $types),*
+            ) -> Self {
+                let x_mat = x.into_faer();
+                let t_col = t.into_faer();
+                let y_col = y.into_faer();
+                let model = $inner_name::new(
+                    x_mat,
+                    t_col,
+                    y_col,
+                    $($pass_args),*
+                );
+                Self { inner: model }
+            }
 
-    fn predict<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let pred = self.inner.predict(x.into_faer());
-        let py_pred = pred.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_pred)
-    }
+            fn predict_uplift<'py>(&self, py: Python<'py>, x: PyReadonlyArray2<f32>) -> PyResult<Bound<'py, PyArray1<f32>>> {
+                let uplift = self.inner.predict_uplift(x.into_faer());
+                Ok(uplift.as_ref().into_ndarray().to_pyarray(py))
+            }
 
-    fn explain<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let explanation = self.inner.explain(x.into_faer());
-        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_expl)
-    }
-}
-
-#[pyclass(name = "Regressor")]
-pub struct PyRegressor {
-    inner: Regressor,
-}
-#[pymethods]
-impl PyRegressor {
-    #[new]
-    fn new(penalty: f32) -> Self {
-        let regressor = Regressor::new(penalty);
-        PyRegressor { inner: regressor }
-    }
-
-    fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
-        self.inner.fit(x.into_faer(), y.into_faer());
-    }
-
-    fn predict<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let pred = self.inner.predict(x.into_faer());
-        let py_pred = pred.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_pred)
-    }
-
-    fn explain<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let explanation = self.inner.explain(x.into_faer());
-        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_expl)
-    }
+            fn explain_uplift<'py>(&self, py: Python<'py>, x: PyReadonlyArray2<f32>) -> PyResult<Bound<'py, PyArray2<f32>>> {
+                let explanation = self.inner.explain_uplift(x.into_faer());
+                Ok(explanation.as_ref().into_ndarray().to_pyarray(py))
+            }
+        }
+    };
 }
 
-#[pyclass(name = "DRLearner")]
-pub struct PyDRLearner {
-    inner: DRLearner,
-}
-#[pymethods]
-impl PyDRLearner {
-    #[new]
-    fn new(
-        x: PyReadonlyArray2<f32>,
-        t: PyReadonlyArray1<f32>,
-        y: PyReadonlyArray1<f32>,
-        mu_penalty: f32,
-        p_penalty: f32,
-        p_max_iter: usize,
-        tau_penalty: f32,
-    ) -> Self {
-        let (x_mat, t_col, y_col) = prepare_input(x, t, y);
-        let model = DRLearner::new(
-            x_mat,
-            t_col,
-            y_col,
-            mu_penalty,
-            p_penalty,
-            p_max_iter,
-            tau_penalty,
-        );
-        PyDRLearner { inner: model }
-    }
+// Generate Python bindings for kernel based predictive models
+impl_py_xmodels!(
+    "Classifier", PyClassifier, Classifier,
+    (penalty: f32, max_iter: usize),
+    (penalty, max_iter)
+);
 
-    fn predict_uplift<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let uplift = self.inner.predict_uplift(x.into_faer());
-        let py_pred = uplift.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_pred)
-    }
+impl_py_xmodels!(
+    "Regressor", PyRegressor, Regressor,
+    (penalty: f32),
+    (penalty)
+);
 
-    fn explain_uplift<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let explanation = self.inner.explain_uplift(x.into_faer());
-        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_expl)
-    }
-}
+// Generate Python bindings for causal metalearners
+impl_py_learner!(
+    "DRLearner", PyDRLearner, DRLearner,
+    (mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
+    (mu_penalty, p_penalty, p_max_iter, tau_penalty)
+);
 
-#[pyclass(name = "RLearner")]
-pub struct PyRLearner {
-    inner: RLearner,
-}
-#[pymethods]
-impl PyRLearner {
-    #[new]
-    fn new(
-        x: PyReadonlyArray2<f32>,
-        t: PyReadonlyArray1<f32>,
-        y: PyReadonlyArray1<f32>,
-        mu_penalty: f32,
-        p_penalty: f32,
-        p_max_iter: usize,
-        tau_penalty: f32,
-    ) -> Self {
-        let (x_mat, t_col, y_col) = prepare_input(x, t, y);
-        let model = RLearner::new(
-            x_mat,
-            t_col,
-            y_col,
-            mu_penalty,
-            p_penalty,
-            p_max_iter,
-            tau_penalty,
-        );
-        PyRLearner { inner: model }
-    }
+impl_py_learner!(
+    "MLearner", PyMLearner, MLearner,
+    (tau_penalty: f32),
+    (tau_penalty)
+);
 
-    fn predict_uplift<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let uplift = self.inner.predict_uplift(x.into_faer());
-        let py_pred = uplift.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_pred)
-    }
+impl_py_learner!(
+    "SLearner", PySLearner, SLearner,
+    (mu_penalty: f32),
+    (mu_penalty)
+);
 
-    fn explain_uplift<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let explanation = self.inner.explain_uplift(x.into_faer());
-        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_expl)
-    }
-}
+impl_py_learner!(
+    "RLearner", PyRLearner, RLearner,
+    (mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
+    (mu_penalty, p_penalty, p_max_iter, tau_penalty)
+);
 
-#[pyclass(name = "SLearner")]
-pub struct PySLearner {
-    inner: SLearner,
-}
-#[pymethods]
-impl PySLearner {
-    #[new]
-    fn new(
-        x: PyReadonlyArray2<f32>,
-        t: PyReadonlyArray1<f32>,
-        y: PyReadonlyArray1<f32>,
-        mu_penalty: f32,
-    ) -> Self {
-        let (x_mat, t_col, y_col) = prepare_input(x, t, y);
-        let model = SLearner::new(x_mat, t_col, y_col, mu_penalty);
-        PySLearner { inner: model }
-    }
+impl_py_learner!(
+    "TLearner", PyTLearner, TLearner,
+    (mu_penalty: f32),
+    (mu_penalty)
+);
 
-    fn predict_uplift<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let uplift = self.inner.predict_uplift(x.into_faer());
-        let py_pred = uplift.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_pred)
-    }
-
-    fn explain_uplift<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let explanation = self.inner.explain_uplift(x.into_faer());
-        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_expl)
-    }
-}
-
-#[pyclass(name = "TLearner")]
-pub struct PyTLearner {
-    inner: TLearner,
-}
-#[pymethods]
-impl PyTLearner {
-    #[new]
-    fn new(
-        x: PyReadonlyArray2<f32>,
-        t: PyReadonlyArray1<f32>,
-        y: PyReadonlyArray1<f32>,
-        mu_penalty: f32,
-    ) -> Self {
-        let (x_mat, t_col, y_col) = prepare_input(x, t, y);
-        let model = TLearner::new(x_mat, t_col, y_col, mu_penalty);
-        PyTLearner { inner: model }
-    }
-
-    fn predict_uplift<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let uplift = self.inner.predict_uplift(x.into_faer());
-        let py_pred = uplift.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_pred)
-    }
-
-    fn explain_uplift<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let explanation = self.inner.explain_uplift(x.into_faer());
-        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_expl)
-    }
-}
-
-#[pyclass(name = "XLearner")]
-pub struct PyXLearner {
-    inner: XLearner,
-}
-#[pymethods]
-impl PyXLearner {
-    #[new]
-    fn new(
-        x: PyReadonlyArray2<f32>,
-        t: PyReadonlyArray1<f32>,
-        y: PyReadonlyArray1<f32>,
-        mu_penalty: f32,
-        p_penalty: f32,
-        p_max_iter: usize,
-        tau_penalty: f32,
-    ) -> Self {
-        let (x_mat, t_col, y_col) = prepare_input(x, t, y);
-        let model = XLearner::new(
-            x_mat,
-            t_col,
-            y_col,
-            mu_penalty,
-            p_penalty,
-            p_max_iter,
-            tau_penalty,
-        );
-        PyXLearner { inner: model }
-    }
-
-    fn predict_uplift<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray1<f32>>> {
-        let uplift = self.inner.predict_uplift(x.into_faer());
-        let py_pred = uplift.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_pred)
-    }
-
-    fn explain_uplift<'py>(
-        &self,
-        py: Python<'py>,
-        x: PyReadonlyArray2<f32>,
-    ) -> PyResult<Bound<'py, PyArray2<f32>>> {
-        let explanation = self.inner.explain_uplift(x.into_faer());
-        let py_expl = explanation.as_ref().into_ndarray().to_pyarray(py);
-        Ok(py_expl)
-    }
-}
+impl_py_learner!(
+    "XLearner", PyXLearner, XLearner,
+    (mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
+    (mu_penalty, p_penalty, p_max_iter, tau_penalty)
+);

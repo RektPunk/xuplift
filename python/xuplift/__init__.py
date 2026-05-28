@@ -1,6 +1,7 @@
 from .xuplift import (
     Classifier,
     DRLearner,
+    MLearner,
     Regressor,
     RLearner,
     SLearner,
@@ -10,8 +11,9 @@ from .xuplift import (
 
 __all__ = [
     "Classifier",
-    "Regressor",
     "DRLearner",
+    "MLearner",
+    "Regressor",
     "RLearner",
     "SLearner",
     "TLearner",
