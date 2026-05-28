@@ -48,9 +48,9 @@ impl KernelFeatureMap {
         }
     }
 
-    /// Fits the transformer to the input data X.
+    /// Fits the transformer to the input matrix X.
     pub fn fit(&mut self, x: MatRef<'_, f32>) {
-        let num_rows = x.nrows();
+        let n_samples = x.nrows();
         self.num_features = x.ncols();
 
         // Calculate raw feature means (skipping NaNs) to use for imputation during landmark selection
@@ -60,7 +60,7 @@ impl KernelFeatureMap {
                 let col = x.col(f_idx);
                 let mut sum = 0.0;
                 let mut count = 0;
-                for i in 0..num_rows {
+                for i in 0..n_samples {
                     let val = col[i];
                     if !val.is_nan() {
                         sum += val;
@@ -72,7 +72,7 @@ impl KernelFeatureMap {
             .collect();
 
         // Identify rows that have no NaNs across all features to use as high-quality landmark candidates
-        let valid_row_indices: Vec<usize> = (0..num_rows)
+        let valid_row_indices: Vec<usize> = (0..n_samples)
             .into_par_iter()
             .filter(|&r_idx| (0..self.num_features).all(|f_idx| !x[(r_idx, f_idx)].is_nan()))
             .collect();
@@ -87,8 +87,8 @@ impl KernelFeatureMap {
             indices.shuffle(&mut rng);
             indices[..self.num_bases].to_vec()
         } else {
-            self.num_bases = num_rows.min(64);
-            let mut all_indices: Vec<usize> = (0..num_rows).collect();
+            self.num_bases = n_samples.min(64);
+            let mut all_indices: Vec<usize> = (0..n_samples).collect();
             let mut rng = rng();
             all_indices.shuffle(&mut rng);
             all_indices[..self.num_bases].to_vec()
@@ -126,7 +126,8 @@ impl KernelFeatureMap {
                 } else {
                     1.0
                 };
-                // Precision parameter $\gamma = 1 / (2 \cdot \text{median}^2)$
+                // Precision parameter $\gamma = 1 / (2 \cdot \text{median}^2)$.
+                // This bandwidth is derived from the RBF kernel formula: exp(-||x-y||^2 / (2\sigma^2))
                 // Add a small epsilon to median to prevent extremely high gamma
                 let s2_inv = 1.0 / (2.0 * (median.max(1e-4)).powi(2));
 
@@ -166,7 +167,7 @@ impl KernelFeatureMap {
                 // Since $Z = K_{nm} P$, the column means are:
                 // $\text{mean}(Z) = \text{mean}(K_{nm}) P$
                 let mut k_col_sums = Col::<f32>::zeros(self.num_bases);
-                for i in 0..num_rows {
+                for i in 0..n_samples {
                     let x_val = x[(i, f_idx)];
                     if !x_val.is_nan() {
                         for j in 0..self.num_bases {
@@ -181,7 +182,7 @@ impl KernelFeatureMap {
                     for j in 0..self.num_bases {
                         sum += k_col_sums[j] * proj_matrix[(j, l)];
                     }
-                    z_col_means[l] = sum / num_rows as f32;
+                    z_col_means[l] = sum / n_samples as f32;
                 }
 
                 (bases, proj_matrix, z_col_means, s2_inv)

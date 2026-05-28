@@ -36,15 +36,15 @@ fn test_gaussian_classification() {
         }
     }
 
-    // Setup and Fit Classifier (IRLS)
+    // --- Model Initialization ---
     let mut model = Classifier::new(penalty, 20); // Perform 20 iterations for convergence
     model.fit(x.as_ref(), y.as_ref());
 
-    // Verify Accuracy
-    let probs = model.predict(x.as_ref());
+    // --- Verification: Accuracy ---
+    let p_pred = model.predict(x.as_ref());
     let mut correct = 0;
     for i in 0..n_samples {
-        let pred = if probs[i] > 0.5 { 1.0 } else { 0.0 };
+        let pred = if p_pred[i] > 0.5 { 1.0 } else { 0.0 };
         if (pred - y[i]).abs() < 1e-5 {
             correct += 1;
         }
@@ -56,33 +56,33 @@ fn test_gaussian_classification() {
         accuracy * 100.0
     );
 
-    // Verify Explanation Consistency:
-    // Sigmoid(Sum(Contributions) + Base_Value) == Predicted_Probability
-    let explanation = model.explain(x.as_ref());
+    // --- Verification: Explanation Consistency ---
+    // Sigmoid(Sum(Contributions) + Base_Value) == Prediction_Probability
+    let uplift_explanation = model.explain(x.as_ref());
 
     for i in 0..n_samples {
         // Sum of logit-scale contributions for each feature
         let mut logit_sum = 0.0;
         for j in 0..n_features {
-            logit_sum += explanation[(i, j)];
+            logit_sum += uplift_explanation[(i, j)];
         }
 
         // Add the global bias (intercept) to the sum of contributions
         let total_logit = logit_sum + model.base_value;
 
         // Reconstruct probability using the Sigmoid function: 1 / (1 + exp(-logit))
-        let reconstructed_prob = 1.0 / (1.0 + (-total_logit).exp());
+        let total_reconstructed_prob = 1.0 / (1.0 + (-total_logit).exp());
 
         // Check if the reconstructed probability matches the model's direct prediction
         assert!(
-            (reconstructed_prob - probs[i]).abs() < 1e-4,
+            (total_reconstructed_prob - p_pred[i]).abs() < 1e-4,
             "Sample {}: Explanation consistency failed. Rec: {:.4}, Prob: {:.4}",
             i,
-            reconstructed_prob,
-            probs[i]
+            total_reconstructed_prob,
+            p_pred[i]
         );
     }
-    println!("Classification explanation check passed for Gaussian Blobs.");
+    println!("Classifier verification passed!");
 }
 
 #[test]
@@ -92,6 +92,7 @@ fn test_classifier_with_nans() {
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
     let mut y = Col::<f32>::zeros(n_samples);
 
+    // --- Synthetic Data Generation ---
     for i in 0..n_samples {
         x[(i, 0)] = i as f32;
         x[(i, 1)] = if i % 10 == 0 {
@@ -102,14 +103,16 @@ fn test_classifier_with_nans() {
         y[i] = if i < n_samples / 2 { 0.0 } else { 1.0 };
     }
 
+    // --- Model Initialization ---
     let mut model = Classifier::new(0.01, 5);
     model.fit(x.as_ref(), y.as_ref());
 
+    // --- Verification ---
     // Check if predictions for NaN rows are still returning values
-    let probs = model.predict(x.as_ref());
+    let p_pred = model.predict(x.as_ref());
     for i in 0..n_samples {
         assert!(
-            !probs[i].is_nan(),
+            !p_pred[i].is_nan(),
             "Probability should not be NaN for sample {}",
             i
         );

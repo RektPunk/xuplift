@@ -26,54 +26,49 @@ fn test_regression() {
         y[i] = 2.0 * v1 - 1.5 * v2 + 0.5 * v3 + 5.0;
     }
 
-    // Setup and Fit Regressor
-    // Initialize the Regressor and solve for coefficients.
+    // --- Model Initialization ---
     let mut model = Regressor::new(penalty);
     model.fit(x.as_ref(), y.as_ref());
 
-    // Verify Prediction Accuracy (MAE)
-    // Expect the Mean Absolute Error (MAE) to be low.
-    let preds = model.predict(x.as_ref());
+    // --- Verification: Accuracy ---
+    let y_pred = model.predict(x.as_ref());
     let mut total_error = 0.0;
     for i in 0..n_samples {
-        total_error += (preds[i] - y[i]).abs();
+        total_error += (y_pred[i] - y[i]).abs();
     }
     let mae = total_error / n_samples as f32;
     println!("Multi-variable Regression MAE: {:.4}", mae);
     assert!(mae < 0.1, "Regression MAE is too high: {:.4}", mae);
 
-    // Verify Explanation Consistency
+    // --- Verification: Explanation Consistency ---
     // The sum of individual feature contributions plus the model's base value (intercept)
-    // must exactly equal the final predicted value for every sample.
-    let explanation = model.explain(x.as_ref());
+    // must equal the prediction for every sample.
+    let uplift_explanation = model.explain(x.as_ref());
 
     // Verify dimensions: rows must match samples, columns must match input features.
-    assert_eq!(explanation.nrows(), n_samples, "Rows mismatch");
-    assert_eq!(explanation.ncols(), n_features, "Columns mismatch");
+    assert_eq!(uplift_explanation.nrows(), n_samples, "Rows mismatch");
+    assert_eq!(uplift_explanation.ncols(), n_features, "Columns mismatch");
 
     for i in 0..n_samples {
         // Sum of all feature contributions for the current sample
         let mut row_contribution_sum = 0.0;
         for j in 0..n_features {
-            row_contribution_sum += explanation[(i, j)];
+            row_contribution_sum += uplift_explanation[(i, j)];
         }
 
-        // Calculation: Pred(x) == Σ Contribution_j + Intercept
-        let reconstructed_pred = row_contribution_sum + model.base_value;
+        // Calculation: Prediction(x) == Σ Contribution_j + Intercept
+        let total_reconstructed_pred = row_contribution_sum + model.base_value;
 
         // Use a small epsilon for floating-point comparison to account for precision loss.
         assert!(
-            (reconstructed_pred - preds[i]).abs() < 1e-4,
+            (total_reconstructed_pred - y_pred[i]).abs() < 1e-4,
             "Sample {}: Consistency check failed. Rec: {:.4}, Pred: {:.4}",
             i,
-            reconstructed_pred,
-            preds[i]
+            total_reconstructed_pred,
+            y_pred[i]
         );
     }
-    println!(
-        "Explanation consistency check passed for {} features.",
-        n_features
-    );
+    println!("Regressor verification passed!");
 }
 
 #[test]
@@ -83,6 +78,7 @@ fn test_regression_with_nans() {
     let mut x = Mat::<f32>::zeros(n_samples, n_features);
     let mut y = Col::<f32>::zeros(n_samples);
 
+    // --- Synthetic Data Generation ---
     for i in 0..n_samples {
         x[(i, 0)] = i as f32;
         x[(i, 1)] = if i % 10 == 0 {
@@ -93,14 +89,16 @@ fn test_regression_with_nans() {
         y[i] = x[(i, 0)] + if x[(i, 1)].is_nan() { 0.0 } else { x[(i, 1)] };
     }
 
+    // --- Model Initialization ---
     let mut model = Regressor::new(0.01);
     model.fit(x.as_ref(), y.as_ref());
 
+    // --- Verification ---
     // Check if predictions for NaN rows are still returning values
-    let preds = model.predict(x.as_ref());
+    let y_pred = model.predict(x.as_ref());
     for i in 0..n_samples {
         assert!(
-            !preds[i].is_nan(),
+            !y_pred[i].is_nan(),
             "Prediction should not be NaN for sample {}",
             i
         );

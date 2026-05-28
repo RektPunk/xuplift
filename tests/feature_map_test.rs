@@ -3,47 +3,53 @@ use xuplift::feature_map::KernelFeatureMap;
 
 #[test]
 fn test_feature_map_basic_functionality() {
+    // --- Model Initialization ---
     // Verify that the KernelFeatureMap initializes and fits correctly on a standard linear dataset.
     let data = Mat::from_fn(10, 2, |r, c| (r as f32) + (c as f32));
-    let mut kfm = KernelFeatureMap::new();
-    kfm.fit(data.as_ref());
+    let mut map = KernelFeatureMap::new();
+    map.fit(data.as_ref());
 
-    assert_eq!(kfm.num_features, 2);
-    assert!(kfm.num_bases > 0);
-    assert_eq!(kfm.feature_bases.len(), 2);
-    assert_eq!(kfm.proj_matrices.len(), 2);
-    assert_eq!(kfm.feature_means.len(), 2);
-    assert_eq!(kfm.s2_invs.len(), 2);
+    // --- Verification ---
+    assert_eq!(map.num_features, 2);
+    assert!(map.num_bases > 0);
+    assert_eq!(map.feature_bases.len(), 2);
+    assert_eq!(map.proj_matrices.len(), 2);
+    assert_eq!(map.feature_means.len(), 2);
+    assert_eq!(map.s2_invs.len(), 2);
 }
 
 #[test]
 fn test_transform_batch() {
+    // --- Model Initialization ---
     // Verify that the batch transform operation produces matrices with the correct dimensions.
     let data = Mat::from_fn(5, 2, |r, c| (r as f32) * (c as f32 + 1.0));
-    let mut kfm = KernelFeatureMap::new();
-    kfm.fit(data.as_ref());
+    let mut map = KernelFeatureMap::new();
+    map.fit(data.as_ref());
 
-    let transformed = kfm.transform_per_feature(data.as_ref());
+    // --- Verification ---
+    let transformed = map.transform_per_feature(data.as_ref());
     assert_eq!(transformed.len(), 2);
     assert_eq!(transformed[0].nrows(), 5);
-    assert_eq!(transformed[0].ncols(), kfm.num_bases);
+    assert_eq!(transformed[0].ncols(), map.num_bases);
 }
 
 #[test]
 fn test_transform_row_matches_transform_batch() {
+    // --- Model Initialization ---
     // Verify that transforming rows individually yields identical results to batch transformation.
     let data = Mat::from_fn(5, 2, |r, c| (r as f32) + (c as f32));
-    let mut kfm = KernelFeatureMap::new();
-    kfm.fit(data.as_ref());
+    let mut map = KernelFeatureMap::new();
+    map.fit(data.as_ref());
 
-    let transformed_batch = kfm.transform_per_feature(data.as_ref());
+    // --- Verification ---
+    let transformed_batch = map.transform_per_feature(data.as_ref());
     for row_idx in 0..5 {
-        let total_dim = kfm.num_features * kfm.num_bases;
+        let total_dim = map.num_features * map.num_bases;
         let mut transformed_row = Col::<f32>::zeros(total_dim);
-        kfm.transform_row_into(data.as_ref(), row_idx, transformed_row.as_mut());
+        map.transform_row_into(data.as_ref(), row_idx, transformed_row.as_mut());
         for f_idx in 0..2 {
-            let offset = f_idx * kfm.num_bases;
-            for b in 0..kfm.num_bases {
+            let offset = f_idx * map.num_bases;
+            for b in 0..map.num_bases {
                 let batch_val = transformed_batch[f_idx][(row_idx, b)];
                 let row_val = transformed_row[offset + b];
                 assert!(
@@ -60,6 +66,7 @@ fn test_transform_row_matches_transform_batch() {
 
 #[test]
 fn test_nan_handling_in_feature_map() {
+    // --- Synthetic Data Generation ---
     // Create a matrix with some NaNs to verify robust handling
     let data = Mat::from_fn(4, 1, |r, _| match r {
         0 => 1.0,
@@ -69,16 +76,18 @@ fn test_nan_handling_in_feature_map() {
         _ => 0.0,
     });
 
-    let mut kfm = KernelFeatureMap::new();
-    kfm.fit(data.as_ref());
+    // --- Model Initialization ---
+    let mut map = KernelFeatureMap::new();
+    map.fit(data.as_ref());
 
+    // --- Verification ---
     // Test transform_row with a NaN row
     // Verify that the transformer correctly masks NaNs by outputting a zero vector.
     let x_nan = Mat::from_fn(1, 1, |_, _| f32::NAN);
 
-    let total_dim = kfm.num_features * kfm.num_bases;
+    let total_dim = map.num_features * map.num_bases;
     let mut z_nan = Col::<f32>::zeros(total_dim);
-    kfm.transform_row_into(x_nan.as_ref(), 0, z_nan.as_mut());
+    map.transform_row_into(x_nan.as_ref(), 0, z_nan.as_mut());
     assert!(
         z_nan.iter().all(|&val| val == 0.0),
         "Output for NaN should be zero vector"
@@ -86,9 +95,9 @@ fn test_nan_handling_in_feature_map() {
 
     // Test transform_row with a valid row
     let x_valid = Mat::from_fn(1, 1, |_, _| 2.0);
-    let total_dim = kfm.num_features * kfm.num_bases;
+    let total_dim = map.num_features * map.num_bases;
     let mut z_valid = Col::<f32>::zeros(total_dim);
-    kfm.transform_row_into(x_valid.as_ref(), 0, z_valid.as_mut());
+    map.transform_row_into(x_valid.as_ref(), 0, z_valid.as_mut());
     assert!(
         z_valid.iter().any(|&val| val != 0.0),
         "Output for valid value should not be zero vector"
