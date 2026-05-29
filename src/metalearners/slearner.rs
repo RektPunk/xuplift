@@ -54,27 +54,18 @@ impl SLearner {
     pub fn predict_uplift(&self, x: MatRef<'_, f32>) -> Col<f32> {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
+        let mut scratch = Mat::<f32>::zeros(num_rows, num_cols + 1);
+        scratch
+            .as_mut()
+            .submatrix_mut(0, 0, num_rows, num_cols)
+            .copy_from(x);
 
-        let (mu_t1_pred, mu_t0_pred) = rayon::join(
-            || {
-                let mut scratch = Mat::<f32>::zeros(num_rows, num_cols + 1);
-                scratch
-                    .as_mut()
-                    .submatrix_mut(0, 0, num_rows, num_cols)
-                    .copy_from(x);
-                scratch.as_mut().col_mut(num_cols).fill(1.0);
-                self.mu.predict(scratch.as_ref())
-            },
-            || {
-                let mut scratch = Mat::<f32>::zeros(num_rows, num_cols + 1);
-                scratch
-                    .as_mut()
-                    .submatrix_mut(0, 0, num_rows, num_cols)
-                    .copy_from(x);
-                scratch.as_mut().col_mut(num_cols).fill(0.0);
-                self.mu.predict(scratch.as_ref())
-            },
-        );
+        scratch.as_mut().col_mut(num_cols).fill(1.0);
+        let mu_t1_pred = self.mu.predict(scratch.as_ref());
+
+        scratch.as_mut().col_mut(num_cols).fill(0.0);
+        let mu_t0_pred = self.mu.predict(scratch.as_ref());
+
         mu_t1_pred - mu_t0_pred
     }
 
@@ -85,25 +76,17 @@ impl SLearner {
     pub fn explain_uplift(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
+        let mut scratch = Mat::<f32>::zeros(num_rows, num_cols + 1);
+        scratch
+            .as_mut()
+            .submatrix_mut(0, 0, num_rows, num_cols)
+            .copy_from(x);
 
-        let (exp_t1, exp_t0) = rayon::join(
-            || {
-                let mut x_t1 = Mat::<f32>::zeros(num_rows, num_cols + 1);
-                x_t1.as_mut()
-                    .submatrix_mut(0, 0, num_rows, num_cols)
-                    .copy_from(x);
-                x_t1.as_mut().col_mut(num_cols).fill(1.0);
-                self.mu.explain(x_t1.as_ref())
-            },
-            || {
-                let mut x_t0 = Mat::<f32>::zeros(num_rows, num_cols + 1);
-                x_t0.as_mut()
-                    .submatrix_mut(0, 0, num_rows, num_cols)
-                    .copy_from(x);
-                x_t0.as_mut().col_mut(num_cols).fill(0.0);
-                self.mu.explain(x_t0.as_ref())
-            },
-        );
+        scratch.as_mut().col_mut(num_cols).fill(1.0);
+        let exp_t1 = self.mu.explain(scratch.as_ref());
+
+        scratch.as_mut().col_mut(num_cols).fill(0.0);
+        let exp_t0 = self.mu.explain(scratch.as_ref());
 
         // The difference reveals the source of the treatment effect
         exp_t1 - exp_t0

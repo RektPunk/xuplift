@@ -53,22 +53,21 @@ impl XLearner {
         let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
         let w_t0 = Col::<f32>::from_fn(num_rows, |i| if t[i] <= 0.5 { 1.0 } else { 0.0 });
 
-        // Fit outcome models concurrently
-        let (mu_t1, mu_t0) = rayon::join(
+        // Fit and predict outcome models concurrently
+        let (d_0, d_1) = rayon::join(
             || {
                 let mut mu_t1 = Regressor::new(mu_penalty);
                 mu_t1.fit_weighted(x, y, &w_t1);
-                mu_t1
+                let mu_t1_pred = mu_t1.predict(x);
+                mu_t1_pred - y
             },
             || {
                 let mut mu_t0 = Regressor::new(mu_penalty);
                 mu_t0.fit_weighted(x, y, &w_t0);
-                mu_t0
+                let mu_t0_pred = mu_t0.predict(x);
+                y - mu_t0_pred
             },
         );
-
-        // Impute treatment effects concurrently: D1 = Y - mu_0(X), D0 = mu_1(X) - Y
-        let (d_1, d_0) = rayon::join(|| y - mu_t0.predict(x), || mu_t1.predict(x) - y);
 
         // Fit tau models and propensity model concurrently
         let ((tau_t1, tau_t0), p) = rayon::join(

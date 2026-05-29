@@ -45,33 +45,27 @@ impl DRLearner {
         let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
         let w_t0 = Col::<f32>::from_fn(num_rows, |i| if t[i] <= 0.5 { 1.0 } else { 0.0 });
 
-        // Fit base outcome models and propensity model concurrently
-        let ((mu_t1, mu_t0), p) = rayon::join(
+        // Fit and predict base outcome models and propensity model concurrently
+        let ((mu_t1_pred, mu_t0_pred), p_pred) = rayon::join(
             || {
                 rayon::join(
                     || {
                         let mut mu_t1 = Regressor::new(mu_penalty);
                         mu_t1.fit_weighted(x, y, &w_t1);
-                        mu_t1
+                        mu_t1.predict(x)
                     },
                     || {
                         let mut mu_t0 = Regressor::new(mu_penalty);
                         mu_t0.fit_weighted(x, y, &w_t0);
-                        mu_t0
+                        mu_t0.predict(x)
                     },
                 )
             },
             || {
                 let mut p = Classifier::new(p_penalty, p_max_iter);
                 p.fit(x, t);
-                p
+                p.predict(x)
             },
-        );
-
-        // Predict components concurrently
-        let (p_pred, (mu_t1_pred, mu_t0_pred)) = rayon::join(
-            || p.predict(x),
-            || rayon::join(|| mu_t1.predict(x), || mu_t0.predict(x)),
         );
 
         // Construct pseudo-outcomes
