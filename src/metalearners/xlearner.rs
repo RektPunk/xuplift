@@ -53,19 +53,17 @@ impl XLearner {
         let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
         let w_t0 = Col::<f32>::from_fn(num_rows, |i| if t[i] <= 0.5 { 1.0 } else { 0.0 });
 
-        // Fit and predict outcome models concurrently
+        // Compute residuals by using outcome models concurrently
         let (d_0, d_1) = rayon::join(
             || {
                 let mut mu_t1 = Regressor::new(mu_penalty);
                 mu_t1.fit_weighted(x, y, &w_t1);
-                let mu_t1_pred = mu_t1.predict(x);
-                mu_t1_pred - y
+                mu_t1.predict(x) - y
             },
             || {
                 let mut mu_t0 = Regressor::new(mu_penalty);
                 mu_t0.fit_weighted(x, y, &w_t0);
-                let mu_t0_pred = mu_t0.predict(x);
-                y - mu_t0_pred
+                y - mu_t0.predict(x)
             },
         );
 

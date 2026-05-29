@@ -43,7 +43,8 @@ impl PWLearner {
         // Construct pseudo-outcomes in parallel
         // Y* = Y * [T / e(x) - (1-T) / (1-e(x))]
         let y_pw = Col::from_fn(num_rows, |i| {
-            let gi = p_pred[i].clamp(0.01, 0.99); // Prevent division by zero
+            // Prevent division by zero and extreme weights
+            let gi = p_pred[i].clamp(0.05, 0.95);
             if t[i] > 0.5 {
                 y[i] / gi
             } else {
