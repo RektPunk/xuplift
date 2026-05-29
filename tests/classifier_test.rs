@@ -37,7 +37,7 @@ fn test_gaussian_classification() {
     }
 
     // --- Model Initialization ---
-    let mut model = Classifier::new(0.1, 10); // Perform 20 iterations for convergence
+    let mut model = Classifier::new(0.1, 10);
     model.fit(x.as_ref(), y.as_ref());
 
     // --- Verification: Accuracy ---
