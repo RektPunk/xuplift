@@ -56,34 +56,34 @@ impl Classifier {
         map.fit(x);
 
         // Allocate space for coefficients and compute initial values
-        let num_rows = x.nrows();
-        let num_features = map.num_features;
-        let num_bases = map.num_bases;
+        let n_samples = x.nrows();
+        let n_features = map.num_features;
+        let n_bases = map.num_bases;
 
         // Validate that the number of rows matches the number of target values
-        if num_rows != y.nrows() {
+        if n_samples != y.nrows() {
             panic!(
                 "Mismatched dimensions: The number of rows in X ({}) must match the number of target values ({}).",
-                num_rows,
+                n_samples,
                 y.nrows()
             );
         }
 
         // Calculate the mean of target 'y' and initialize base_value in logit space
-        let mean_y = y.iter().sum::<f32>() / num_rows as f32;
+        let mean_y = y.iter().sum::<f32>() / n_samples as f32;
         let eps = 1e-6;
         let p_clamped = mean_y.clamp(eps, 1.0 - eps);
         self.base_value = (p_clamped / (1.0 - p_clamped)).ln();
 
-        let total_dim = num_features * num_bases;
+        let total_dim = n_features * n_bases;
 
-        // Initialize weights
+        // Initialize coefficients
         let mut w = Col::<f32>::zeros(total_dim);
 
         // IRLS Iteration: Streaming approach to save memory
         for _ in 0..self.max_iter {
             let base_val = self.base_value;
-            let (mut hessian, rhs, _) = (0..num_rows)
+            let (mut hessian, rhs, _) = (0..n_samples)
                 .into_par_iter()
                 .fold(
                     || {
@@ -141,16 +141,15 @@ impl Classifier {
                 hessian[(i, i)] += self.penalty;
             }
 
-            // Solve the normal equations (H * delta_w = gradient) using LDLT decomposition.
-            // Use safe pattern to handle singular matrices without panics.
+            // Solve the normal equations (H * delta_w = gradient) using LDLT decomposition
             let delta_w = if let Ok(ldlt) = hessian.ldlt(faer::Side::Lower) {
                 ldlt.solve(&rhs)
             } else {
-                // If Hessian is singular, stop iterations early.
+                // If Hessian is singular, stop iterations early
                 break;
             };
 
-            // Convergence check based on the update magnitude.
+            // Convergence check based on the update magnitude
             let update_mag: f32 = delta_w.iter().map(|&x| x.abs()).sum();
             if update_mag <= 1e-6 {
                 break;
@@ -158,16 +157,16 @@ impl Classifier {
             w += delta_w;
         }
 
-        // De-stack the weight vector into per-feature coefficients.
-        self.coefficients = (0..num_features)
+        // De-stack the weight vector into per-feature coefficients
+        self.coefficients = (0..n_features)
             .into_par_iter()
             .map(|f_idx| {
-                let start = f_idx * num_bases;
-                w.as_ref().subrows(start, num_bases).to_owned()
+                let start = f_idx * n_bases;
+                w.as_ref().subrows(start, n_bases).to_owned()
             })
             .collect();
 
-        // Store the kernel map.
+        // Store the kernel map
         self.kernel_feature_map = Some(Arc::new(map));
     }
 
@@ -179,29 +178,29 @@ impl Classifier {
             .kernel_feature_map
             .as_ref()
             .expect("Model must be fitted before prediction.");
-        // Validate that the number of columns in the input matches the number of features in the feature map
-        let num_features = map.num_features;
-        let num_rows = x.nrows();
-        if num_features != x.ncols() {
+        let n_samples = x.nrows();
+        let n_features = map.num_features;
+
+        if n_features != x.ncols() {
             panic!(
                 "Mismatched dimensions: The number of columns in the feature map ({}) must match the number of input columns ({}).",
-                num_features,
+                n_features,
                 x.ncols()
             );
         }
 
         // Process in chunks to save memory
-        let chunk_size = 10000.min(num_rows);
-        let mut prediction = Col::<f32>::zeros(num_rows);
+        let chunk_size = 10000.min(n_samples);
+        let mut p_pred = Col::<f32>::zeros(n_samples);
 
-        for start_row in (0..num_rows).step_by(chunk_size) {
-            let end_row = (start_row + chunk_size).min(num_rows);
+        for start_row in (0..n_samples).step_by(chunk_size) {
+            let end_row = (start_row + chunk_size).min(n_samples);
             let n_chunk = end_row - start_row;
             let x_chunk = x.subrows(start_row, n_chunk);
 
             let z_matrices = map.transform_per_feature(x_chunk);
 
-            let chunk_pred = (0..num_features)
+            let chunk_pred = (0..n_features)
                 .into_par_iter()
                 .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
                 .reduce(
@@ -213,10 +212,10 @@ impl Classifier {
                 );
 
             for i in 0..n_chunk {
-                prediction[start_row + i] = Self::sigmoid(chunk_pred[i] + self.base_value);
+                p_pred[start_row + i] = Self::sigmoid(chunk_pred[i] + self.base_value);
             }
         }
-        prediction
+        p_pred
     }
 
     /// Explains the model's prediction by decomposing it into individual feature contributions.
@@ -228,34 +227,34 @@ impl Classifier {
             .kernel_feature_map
             .as_ref()
             .expect("Model must be fitted before explanation.");
-        // Validate that the number of columns in the input matches the number of features in the feature map
-        let num_features = map.num_features;
-        let num_rows = x.nrows();
-        if num_features != x.ncols() {
+        let n_samples = x.nrows();
+        let n_features = map.num_features;
+
+        if n_features != x.ncols() {
             panic!(
                 "Mismatched dimensions: The number of columns in the feature map ({}) must match the number of input columns ({}).",
-                num_features,
+                n_features,
                 x.ncols()
             );
         }
 
         // Process in chunks to save memory
-        let chunk_size = 10000.min(num_rows);
-        let mut contributions = Mat::<f32>::zeros(num_rows, num_features);
+        let chunk_size = 10000.min(n_samples);
+        let mut contributions = Mat::<f32>::zeros(n_samples, n_features);
 
-        for start_row in (0..num_rows).step_by(chunk_size) {
-            let end_row = (start_row + chunk_size).min(num_rows);
+        for start_row in (0..n_samples).step_by(chunk_size) {
+            let end_row = (start_row + chunk_size).min(n_samples);
             let n_chunk = end_row - start_row;
             let x_chunk = x.subrows(start_row, n_chunk);
 
             let z_matrices = map.transform_per_feature(x_chunk);
 
-            let chunk_contributions: Vec<Col<f32>> = (0..num_features)
+            let chunk_contributions: Vec<Col<f32>> = (0..n_features)
                 .into_par_iter()
                 .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
                 .collect();
 
-            for j in 0..num_features {
+            for j in 0..n_features {
                 for i in 0..n_chunk {
                     contributions[(start_row + i, j)] = chunk_contributions[j][i];
                 }
