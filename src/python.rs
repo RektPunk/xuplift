@@ -3,7 +3,6 @@ use numpy::ndarray::{ArrayView1, ArrayView2, ShapeBuilder};
 use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
-pub use crate::feature_map::KernelFeatureMap;
 pub use crate::xmodels::classifier::Classifier;
 pub use crate::xmodels::regressor::Regressor;
 

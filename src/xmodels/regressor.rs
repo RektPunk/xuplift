@@ -4,7 +4,7 @@ use faer::prelude::Solve;
 use faer::{Col, ColRef, Mat, MatRef};
 use rayon::prelude::*;
 
-use crate::feature_map::KernelFeatureMap;
+use crate::xmodels::feature_map::KernelFeatureMap;
 
 /// A Ridge Regressor that uses transformed non-linear features.
 ///
@@ -225,6 +225,6 @@ impl Regressor {
                 }
             });
 
-        faer::MatRef::from_column_major_slice(&contributions, n_samples, n_features).to_owned()
+        MatRef::from_column_major_slice(&contributions, n_samples, n_features).to_owned()
     }
 }

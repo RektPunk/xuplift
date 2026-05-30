@@ -1,8 +1,8 @@
 use faer::{Col, Mat};
 use rand::RngExt;
 
-pub use xuplift::feature_map::KernelFeatureMap;
 pub use xuplift::xmodels::classifier::Classifier;
+pub use xuplift::xmodels::feature_map::KernelFeatureMap;
 pub use xuplift::xmodels::regressor::Regressor;
 
 #[test]

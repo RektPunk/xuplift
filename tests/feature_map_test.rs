@@ -1,5 +1,5 @@
 use faer::{Col, Mat};
-use xuplift::feature_map::KernelFeatureMap;
+use xuplift::xmodels::feature_map::KernelFeatureMap;
 
 #[test]
 fn test_feature_map_basic_functionality() {
