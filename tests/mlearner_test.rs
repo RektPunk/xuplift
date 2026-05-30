@@ -1,9 +1,9 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::slearner::SLearner;
+use xuplift::metalearners::mlearner::MLearner;
 
 #[test]
-fn test_slearner() {
+fn test_mlearner() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -25,16 +25,18 @@ fn test_slearner() {
         x[(i, 2)] = x2;
 
         // Assign treatment: Even indices = Treatment (1), Odd indices = Control (0)
+        // M-Learner assumes a randomized controlled trial (RCT) environment with 50/50 propensity.
         let treatment = if i % 2 == 0 { 1.0 } else { 0.0 };
         t[i] = treatment;
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
     // --- Model Initialization ---
-    let slearner = SLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.01);
+    // MLearner applies target transformation and fits a tau model on the pseudo-outcomes.
+    let mlearner = MLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1);
 
     // --- Prediction ---
-    let uplift_estimate = slearner.predict_uplift(x.as_ref());
+    let uplift_estimate = mlearner.predict_uplift(x.as_ref());
 
     // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
@@ -44,36 +46,39 @@ fn test_slearner() {
     let avg_uplift = sum_uplift / n_samples as f32;
 
     println!(
-        "True Uplift: 5.0, Estimated Average Uplift: {:.4}",
+        "True Uplift: 5.0, M-Learner Estimated Average Uplift: {:.4}",
         avg_uplift
     );
 
     assert!(
-        (avg_uplift - 5.0).abs() < 0.1,
+        (avg_uplift - 5.0).abs() < 0.5,
         "Uplift estimation is too far from ground truth. Got: {:.4}",
         avg_uplift
     );
 
     // --- Verification: Explanation Consistency ---
-    let uplift_explanation = slearner.explain_uplift(x.as_ref());
+    // In M-Learner, the explanation is straightforward because it uses a tau regressor.
+    let uplift_explanation = mlearner.explain_uplift(x.as_ref());
 
-    // S-Learner's explanation matrix should have n_features + 1 columns (X + T).
-    assert_eq!(uplift_explanation.ncols(), n_features + 1);
+    // M-Learner's explanation matrix should have n_features columns.
+    assert_eq!(uplift_explanation.ncols(), n_features);
 
+    let base_value = mlearner.tau.base_value;
     for i in 0..x.nrows() {
         let mut explained_total = 0.0;
         for j in 0..uplift_explanation.ncols() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // For S-Learner, sum(contributions) should equal the predicted uplift.
+        // Reconstructed Uplift = sum(feature_contributions) + base_value
+        let total_reconstructed_uplift = explained_total + base_value;
         assert!(
-            (explained_total - uplift_estimate[i]).abs() < 1e-4,
+            (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
             "Uplift explanation delta mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
             i,
-            explained_total,
+            total_reconstructed_uplift,
             uplift_estimate[i]
         );
     }
-    println!("SLearner verification passed!");
+    println!("MLearner verification passed!");
 }

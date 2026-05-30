@@ -1,9 +1,9 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::xlearner::XLearner;
+use xuplift::metalearners::drlearner::DRLearner;
 
 #[test]
-fn test_xlearner() {
+fn test_drlearner() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -25,7 +25,7 @@ fn test_xlearner() {
         x[(i, 2)] = x2;
 
         // Intentional Imbalance: Only 20% receive treatment
-        // X-Learner should handle the 20/80 imbalance well
+        // DR-Learner should handle the 20/80 imbalance well
         let treatment = if i % 5 == 0 { 1.0 } else { 0.0 };
         t[i] = treatment;
 
@@ -34,12 +34,13 @@ fn test_xlearner() {
     }
 
     // --- Model Initialization ---
-    // X-Learner fits 5 models:
-    // Stage 1: mu_1, mu_0 | Stage 2: tau_1, tau_0 | Stage 3: p (propensity)
-    let xlearner = XLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
+    // DR-Learner fits 4 models:
+    // Stage 1: mu_1, mu_0 (base outcomes) | Stage 2: p (propensity score)
+    // Stage 3: Construct pseudo-outcomes | Stage 4: tau (CATE regressor)
+    let drlearner = DRLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
 
     // --- Prediction ---
-    let uplift_estimate = xlearner.predict_uplift(x.as_ref());
+    let uplift_estimate = drlearner.predict_uplift(x.as_ref());
 
     // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
@@ -49,7 +50,7 @@ fn test_xlearner() {
     let avg_uplift = sum_uplift / n_samples as f32;
 
     println!(
-        "True Uplift: 5.0, X-Learner Estimated Avg Uplift: {:.4}",
+        "True Uplift: 5.0, DRLearner Estimated Avg Uplift: {:.4}",
         avg_uplift
     );
 
@@ -60,35 +61,26 @@ fn test_xlearner() {
     );
 
     // --- Verification: Explanation Consistency ---
-    // In X-Learner, the explanation must account for the dynamic base value
-    // caused by the propensity-weighted blending of two models.
-    let uplift_explanation = xlearner.explain_uplift(x.as_ref());
-
-    // X-Learner's explanation matrix should have n_features columns.
+    // In DR-Learner, the explanation is straightforward because it uses a tau regressor.
+    let uplift_explanation = drlearner.explain_uplift(x.as_ref());
     assert_eq!(uplift_explanation.ncols(), n_features);
 
-    let p_pred = xlearner.p.predict(x.as_ref());
-
+    let base_value = drlearner.tau.base_value;
     for i in 0..x.nrows() {
         let mut explained_total = 0.0;
-        for j in 0..n_features {
+        for j in 0..uplift_explanation.ncols() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // Reconstructed Uplift = sum(weighted_feature_contributions) + dynamic_base_value
-        // Dynamic Base Value: g(x)*base_tau0 + (1-g(x))*base_tau1
-        let gi = p_pred[i].clamp(0.01, 0.99);
-        let dynamic_base =
-            gi * xlearner.tau_t0.base_value + (1.0 - gi) * xlearner.tau_t1.base_value;
-
-        let total_reconstructed_uplift = explained_total + dynamic_base;
+        // Reconstructed Uplift = sum(feature_contributions) + base_value
+        let total_reconstructed_uplift = explained_total + base_value;
         assert!(
             (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
-            "X-Learner explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
+            "Uplift explanation delta mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
             i,
             total_reconstructed_uplift,
             uplift_estimate[i]
         );
     }
-    println!("XLearner verification passed!");
+    println!("DRLearner verification passed!");
 }

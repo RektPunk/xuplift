@@ -1,9 +1,9 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::tlearner::TLearner;
+use xuplift::metalearners::grlearner::GRLearner;
 
 #[test]
-fn test_tlearner() {
+fn test_grlearner() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -12,9 +12,11 @@ fn test_tlearner() {
     let mut y = Col::<f32>::zeros(n_samples);
 
     // --- Synthetic Data Generation ---
-    // Objective: Create a dataset with a known constant treatment effect.
-    // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
-    // Ground Truth Uplift (ITE): 5.0
+    // Objective: Create a dataset with continuous treatment and known confounding.
+    // Generative Model:
+    // t = 2.0 * x0 + Noise_T
+    // y = 1.5 * x0 + 0.5 * sin(x1) + (5.0 * t) + 10.0 + Noise_Y
+    // Ground Truth Uplift (CATE Slope): 5.0
     for i in 0..n_samples {
         let x0 = i as f32 * 0.01;
         let x1 = (i as f32).sin();
@@ -24,19 +26,23 @@ fn test_tlearner() {
         x[(i, 1)] = x1;
         x[(i, 2)] = x2;
 
-        // Assign treatment: Even indices = Treatment (1), Odd indices = Control (0)
-        let treatment = if i % 2 == 0 { 1.0 } else { 0.0 };
+        // Continuous Treatment with confounding bias (dependent on x0)
+        // Even/Odd patterns inject clean variation around the confounder line
+        let treatment_noise = if i % 2 == 0 { 0.5 } else { -0.5 };
+        let treatment = 2.0 * x0 + treatment_noise;
         t[i] = treatment;
 
-        // Outcome depends on X and a clear Treatment effect (5.0)
-        y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
+        // Outcome y with a true treatment effect multiplier of 5.0
+        let outcome_noise = if i % 3 == 0 { 0.1 } else { -0.1 };
+        y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0 + outcome_noise;
     }
 
     // --- Model Initialization ---
-    let tlearner = TLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.01);
+    // GRLearner uses regressors for both outcome and treatment models to support continuous treatment.
+    let grlearner = GRLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.001, 0.001, 0.001);
 
     // --- Prediction ---
-    let uplift_estimate = tlearner.predict_uplift(x.as_ref());
+    let uplift_estimate = grlearner.predict_uplift(x.as_ref());
 
     // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
@@ -46,7 +52,7 @@ fn test_tlearner() {
     let avg_uplift = sum_uplift / n_samples as f32;
 
     println!(
-        "True Uplift: 5.0, Estimated Average Uplift: {:.4}",
+        "True Uplift: 5.0, GRLearner Estimated Average Uplift: {:.4}",
         avg_uplift
     );
 
@@ -57,21 +63,20 @@ fn test_tlearner() {
     );
 
     // --- Verification: Explanation Consistency ---
-    // In T-Learner, the explanation is the difference between two models' contributions.
-    let uplift_explanation = tlearner.explain_uplift(x.as_ref());
+    let uplift_explanation = grlearner.explain_uplift(x.as_ref());
 
-    // T-Learner's explanation matrix should have n_features columns.
+    // Regressor-based explanation matrix should have n_features columns.
     assert_eq!(uplift_explanation.ncols(), n_features);
 
+    let base_value = grlearner.tau.base_value;
     for i in 0..x.nrows() {
         let mut explained_total = 0.0;
         for j in 0..uplift_explanation.ncols() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // Reconstructed Uplift = sum(feature_contributions) + delta_base_values
-        let base_value_diff = tlearner.mu_t1.base_value - tlearner.mu_t0.base_value;
-        let total_reconstructed_uplift = explained_total + base_value_diff;
+        // Reconstructed Uplift = sum(feature_contributions) + base_value
+        let total_reconstructed_uplift = explained_total + base_value;
         assert!(
             (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
             "Uplift explanation delta mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
@@ -80,5 +85,5 @@ fn test_tlearner() {
             uplift_estimate[i]
         );
     }
-    println!("TLearner verification passed!");
+    println!("GRLearner verification passed!");
 }

@@ -11,9 +11,9 @@ fn test_rlearner() {
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // Synthetic Data Generation
+    // --- Synthetic Data Generation ---
+    // Objective: Create a dataset with a known constant treatment effect.
     // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
-    // Propensity (e(x)): 0.5 (Random assignment)
     // Ground Truth Uplift (ITE): 5.0
     for i in 0..n_samples {
         let x0 = i as f32 * 0.01;
@@ -32,13 +32,14 @@ fn test_rlearner() {
         y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
-    // R-Learner trains: m(x) [Outcome], e(x) [Propensity], and tau(x) [Residual-on-Residual]
+    // --- Model Initialization ---
+    // R-Learner fits: m(x) [Outcome], e(x) [Propensity], and tau(x) [Residual-on-Residual]
     let rlearner = RLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
 
-    // Estimate Individual Treatment Effect (ITE).
+    // --- Prediction ---
     let uplift_estimate = rlearner.predict_uplift(x.as_ref());
 
-    // Verify if the average estimated uplift is close to the true effect.
+    // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
     for i in 0..n_samples {
         sum_uplift += uplift_estimate[i];
@@ -56,10 +57,11 @@ fn test_rlearner() {
         avg_uplift
     );
 
-    // Verify Mathematical Explanation Consistency
-    // For R-Learner, the explanation logic is simpler because it's a single Stage-2 model.
-    // Predict(x) should be approximately (sum of feature contributions + base_value).
+    // --- Verification: Explanation Consistency ---
     let uplift_explanation = rlearner.explain_uplift(x.as_ref());
+
+    // R-Learner's explanation matrix should have n_features columns.
+    assert_eq!(uplift_explanation.ncols(), n_features);
 
     for i in 0..x.nrows() {
         let mut explained_total = 0.0;
@@ -67,16 +69,15 @@ fn test_rlearner() {
             explained_total += uplift_explanation[(i, j)];
         }
 
-        // R-Learner's prediction is derived from its internal tau regressor.
-        let reconstructed_uplift = explained_total + rlearner.tau.base_value;
-
+        // Reconstructed Uplift = sum(feature_contributions) + base_value
+        let total_reconstructed_uplift = explained_total + rlearner.tau.base_value;
         assert!(
-            (reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
+            (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
             "R-Learner explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
             i,
-            reconstructed_uplift,
+            total_reconstructed_uplift,
             uplift_estimate[i]
         );
     }
-    println!("RLearner Residual Explanation check passed!");
+    println!("RLearner verification passed!");
 }

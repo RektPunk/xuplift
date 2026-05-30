@@ -1,32 +1,30 @@
 use faer::{Col, ColRef, Mat, MatRef};
 
-use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
 
-/// R-Learner (Residual Learner) for Uplift Modeling.
+/// Generalized R-Learner (GR-Learner) for Uplift Modeling.
 ///
-/// This learner focuses on the residual-on-residual regression.
-/// It first fits an outcome model $m(x) = E[Y|X]$ and a propensity model $e(x) = E[T|X]$.
-/// The treatment effect $\tau(x)$ is then estimated by minimizing the R-objective:
-/// $$\min_{\tau} \sum_{i=1}^n [ (y_i - m(x_i)) - (t_i - e(x_i)) \tau(x_i) ]^2$$
+/// This learner isolates the causal effect by residualizing both the outcome and the treatment.
+/// Unlike the standard R-Learner which uses a Classifier for binary treatment propensity,
+/// GR-Learner uses a Regressor for the treatment model, making it capable of handling
+/// both continuous and binary treatment variables natively.
 ///
 /// # Reference
 /// * Nie, X., & Wager, S. (2021). Quasi-oracle estimation of heterogeneous treatment effects. Biometrika, 108(2), 299–319. https://doi.org/10.1093/biomet/asaa076
-pub struct RLearner {
+pub struct GRLearner {
     /// Treatment effect model
     pub tau: Regressor,
 }
 
-impl RLearner {
-    /// Initializes and fits the RLearner using the provided data.
+impl GRLearner {
+    /// Initializes and fits the GRLearner using the provided data.
     ///
     /// # Arguments
     /// * `x` - Feature matrix (n_samples x n_features).
-    /// * `t` - Treatment vector (n_samples).
+    /// * `t` - Treatment vector (n_samples, continuous or binary).
     /// * `y` - Outcome vector (n_samples).
     /// * `mu_penalty` - Regularization penalty for the outcome model.
-    /// * `p_penalty` - Regularization penalty for the propensity model.
-    /// * `p_max_iter` - Maximum iterations for the propensity model solver.
+    /// * `p_penalty` - Regularization penalty for the treatment model.
     /// * `tau_penalty` - Regularization penalty for the treatment effect model.
     pub fn new(
         x: MatRef<'_, f32>,
@@ -34,12 +32,11 @@ impl RLearner {
         y: ColRef<'_, f32>,
         mu_penalty: f32,
         p_penalty: f32,
-        p_max_iter: usize,
         tau_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
 
-        // Fit and predict outcome model mu(x) and propensity model p(x) concurrently
+        // Fit and predict outcome model mu(x) and treatment model p(x) concurrently
         let (mu_pred, p_pred) = rayon::join(
             || {
                 let mut mu = Regressor::new(mu_penalty);
@@ -47,7 +44,7 @@ impl RLearner {
                 mu.predict(x)
             },
             || {
-                let mut p = Classifier::new(p_penalty, p_max_iter);
+                let mut p = Regressor::new(p_penalty);
                 p.fit(x, t);
                 p.predict(x)
             },
@@ -56,11 +53,9 @@ impl RLearner {
         // Compute residuals and weighted targets
         // Objective: Minimize (y_tilde - t_tilde * tau)^2
         // Equivalent to Weighted Least Squares: Minimize sum( w_i * (target_i - tau)^2 )
-        // where target_i = y_tilde / t_tilde and w_i = t_tilde^2
         let r_target_col = Col::<f32>::from_fn(num_rows, |i| {
             let y_tilde = y[i] - mu_pred[i];
-            let t_tilde = t[i] - (p_pred[i].clamp(0.01, 0.99));
-
+            let t_tilde = t[i] - p_pred[i];
             if t_tilde.abs() > 1e-6 {
                 y_tilde / t_tilde
             } else {
@@ -69,7 +64,7 @@ impl RLearner {
         });
 
         let r_weights_col = Col::<f32>::from_fn(num_rows, |i| {
-            let t_tilde = t[i] - (p_pred[i].clamp(0.01, 0.99));
+            let t_tilde = t[i] - p_pred[i];
             t_tilde * t_tilde
         });
 
