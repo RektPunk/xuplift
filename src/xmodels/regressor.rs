@@ -47,7 +47,6 @@ impl Regressor {
     /// This method solves the system: $(Z^T W Z + \lambda I) \alpha = Z^T W (y - b)$
     /// where $W$ is a diagonal weight matrix.
     pub fn fit_weighted(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>, weights: &Col<f32>) {
-        // Initialize and fit the kernel map if it hasn't been set yet
         let mut map = KernelFeatureMap::new();
         map.fit(x);
 
@@ -66,8 +65,8 @@ impl Regressor {
             );
         }
 
+        // The base_value $b$ is the weighted mean of the target $y$
         let total_weight: f32 = weights.iter().sum();
-        // The base_value $b$ is the weighted mean of the target $y$.
         self.base_value = if total_weight > 1e-6 {
             weights
                 .iter()
@@ -146,6 +145,7 @@ impl Regressor {
         // Store the kernel map
         self.kernel_feature_map = Some(Arc::new(map));
     }
+
     /// Predicts target values for the given feature matrix X.
     ///
     /// The prediction is: $\hat{y} = Z \alpha + b = \sum_{j} (Z_j \alpha_j) + b$.
@@ -166,7 +166,6 @@ impl Regressor {
             );
         }
 
-        // Feature-wise streaming prediction
         let mut prediction = (0..n_features)
             .into_par_iter()
             .map(|f_idx| {

@@ -49,17 +49,18 @@ impl Classifier {
     /// Fits the binary classifier using the IRLS algorithm.
     ///
     /// This implementation uses target centering (y - mean) to align with the Regressor's logic.
-    /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column.
-    /// Employs streaming Hessian accumulation to optimize memory usage:
+    /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column:
     /// $w_{new} = w_{old} + (Z^T R Z + \lambda I)^{-1} Z^T (y - \mu)$
     pub fn fit(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>) {
         let mut map = KernelFeatureMap::new();
         map.fit(x);
 
+        // Allocate space for coefficients and compute initial values
         let n_samples = x.nrows();
         let n_features = map.num_features;
         let n_bases = map.num_bases;
 
+        // Validate that the number of rows matches the number of target values and weights
         if n_samples != y.nrows() {
             panic!(
                 "Mismatched dimensions: The number of rows in X ({}) must match the number of target values ({}).",
@@ -74,6 +75,7 @@ impl Classifier {
         let p_clamped = mean_y.clamp(eps, 1.0 - eps);
         self.base_value = (p_clamped / (1.0 - p_clamped)).ln();
 
+        // Initialize coefficients
         let total_dim = n_features * n_bases;
         let mut w = Col::<f32>::zeros(total_dim);
 

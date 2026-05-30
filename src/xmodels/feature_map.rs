@@ -117,7 +117,7 @@ impl KernelFeatureMap {
                     1.0
                 };
 
-                // Precision parameter $\gamma = 1 / (2 \cdot \text{median}^2)$.
+                // Precision parameter $\gamma = 1 / (2 \cdot \text{median}^2)$
                 let s2_inv = 1.0 / (2.0 * (median.max(1e-4)).powi(2));
 
                 // Store landmark values
@@ -141,7 +141,7 @@ impl KernelFeatureMap {
                 }
 
                 // Eigen-decomposition for symmetric inverse square root: $K_{mm}^{-1/2} = U \Lambda^{-1/2} U^T$
-                // This ensures that the transformed features are approximately orthonormal.
+                // This ensures that the transformed features are approximately orthonormal
                 let eig = k_mm.self_adjoint_eigen(faer::Side::Lower).unwrap();
                 let mut inv_s = Mat::<f32>::zeros(self.num_bases, self.num_bases);
                 for d in 0..self.num_bases {
@@ -151,7 +151,7 @@ impl KernelFeatureMap {
 
                 let proj_matrix = eig.U() * &inv_s;
 
-                // Compute feature means for centering without storing full $Z$ matrix.
+                // Compute feature means for centering without storing full $Z$ matrix
                 // Since $Z = K_{nm} P$, the column means are:
                 // $\text{mean}(Z) = \text{mean}(K_{nm}) P$
                 let mut k_col_sums = Col::<f32>::zeros(self.num_bases);
@@ -187,19 +187,19 @@ impl KernelFeatureMap {
 
     /// Transforms an entire row into the joint kernel feature space by concatenating all mapped features.
     ///
-    /// For a given $x$, it computes the mapped feature for each feature $f$ and landmark $l$,
+    /// For a given row index and input matrix $x$, it computes the mapped feature for each feature $f$ and landmark $l$,
     /// and stores it at the corresponding layout offset $f \cdot m + l$:
     /// $$\text{out}[f \cdot m + l] = \left( \sum_{j=1}^m k(x_f, u_{f, j}) P_{f, jl} \right) - \mu_{f, l}$$
     /// where $m$ is `num_bases`, $k$ is the RBF kernel, $P_f$ is the projection matrix, and $\mu_f$ is the centering mean.
     pub fn transform_row_into(&self, x: MatRef<'_, f32>, row_idx: usize, mut out: ColMut<'_, f32>) {
-        // Temporary buffer on the stack to store intermediate kernel calculations.
-        // Capped at 64 as per the Nystrom landmark selection logic.
+        // Temporary buffer on the stack to store intermediate kernel calculations
+        // Capped at 64 as per the Nystrom landmark selection logic
         let mut kernel_cache = [0.0f32; 64];
         for f_idx in 0..self.num_features {
             let x_val = x[(row_idx, f_idx)];
             let offset = f_idx * self.num_bases;
 
-            // Handle missing values by zeroing the output for this feature.
+            // Handle missing values
             if x_val.is_nan() {
                 for j in 0..self.num_bases {
                     out[offset + j] = 0.0;
@@ -231,7 +231,7 @@ impl KernelFeatureMap {
 
     /// Transforms a specific feature column across all rows into its Nystrom kernel feature space.
     ///
-    /// For a given feature index $f$ and all sample rows $i$, it computes the mapped feature
+    /// For a given feature index $f$ and input matrix $x$, it computes the mapped feature
     /// for each landmark $l$ and stores it in the output matrix at position $(i, l)$:
     /// $$\text{out}[i, l] = \left( \sum_{j=1}^m k(x_{i, f}, u_{f, j}) P_{f, jl} \right) - \mu_{f, l}$$
     /// where $m$ is `num_bases`, $k$ is the RBF kernel, $P_f$ is the projection matrix,
@@ -259,8 +259,8 @@ impl KernelFeatureMap {
                 continue;
             }
 
-            // Temporary buffer on the stack to store intermediate kernel calculations.
-            // Capped at 64 as per the Nystrom landmark selection logic.
+            // Temporary buffer on the stack to store intermediate kernel calculations
+            // Capped at 64 as per the Nystrom landmark selection logic
             let mut kernel_cache = [0.0f32; 64];
 
             // Pre-calculate RBF kernel distances between input and landmarks
