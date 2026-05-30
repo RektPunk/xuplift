@@ -1,5 +1,5 @@
 use faer::{Col, Mat};
-use xuplift::feature_map::KernelFeatureMap;
+use xuplift::xmodels::feature_map::KernelFeatureMap;
 
 #[test]
 fn test_feature_map_basic_functionality() {
@@ -19,41 +19,46 @@ fn test_feature_map_basic_functionality() {
 }
 
 #[test]
-fn test_transform_batch() {
+fn test_transform_feature_into() {
     // --- Model Initialization ---
-    // Verify that the batch transform operation produces matrices with the correct dimensions.
+    // Verify that the transform operation produces matrices with the correct dimensions.
     let data = Mat::from_fn(5, 2, |r, c| (r as f32) * (c as f32 + 1.0));
     let mut map = KernelFeatureMap::new();
     map.fit(data.as_ref());
 
     // --- Verification ---
-    let transformed = map.transform_per_feature(data.as_ref());
-    assert_eq!(transformed.len(), 2);
-    assert_eq!(transformed[0].nrows(), 5);
-    assert_eq!(transformed[0].ncols(), map.num_bases);
+    for f_idx in 0..map.num_features {
+        let mut transformed = Mat::<f32>::zeros(5, map.num_bases);
+        map.transform_feature_into(data.as_ref(), f_idx, transformed.as_mut());
+        assert_eq!(transformed.nrows(), 5);
+        assert_eq!(transformed.ncols(), map.num_bases);
+    }
 }
 
 #[test]
-fn test_transform_row_matches_transform_batch() {
+fn test_transform_row_matches_feature_transform() {
     // --- Model Initialization ---
-    // Verify that transforming rows individually yields identical results to batch transformation.
+    // Verify that transforming rows individually yields identical results to feature-wise transformation.
     let data = Mat::from_fn(5, 2, |r, c| (r as f32) + (c as f32));
     let mut map = KernelFeatureMap::new();
     map.fit(data.as_ref());
 
     // --- Verification ---
-    let transformed_batch = map.transform_per_feature(data.as_ref());
-    for row_idx in 0..5 {
-        let total_dim = map.num_features * map.num_bases;
-        let mut transformed_row = Col::<f32>::zeros(total_dim);
-        map.transform_row_into(data.as_ref(), row_idx, transformed_row.as_mut());
-        for f_idx in 0..2 {
+    for f_idx in 0..map.num_features {
+        let mut transformed_feat = Mat::<f32>::zeros(5, map.num_bases);
+        map.transform_feature_into(data.as_ref(), f_idx, transformed_feat.as_mut());
+
+        for row_idx in 0..5 {
+            let total_dim = map.num_features * map.num_bases;
+            let mut transformed_row = Col::<f32>::zeros(total_dim);
+            map.transform_row_into(data.as_ref(), row_idx, transformed_row.as_mut());
+
             let offset = f_idx * map.num_bases;
             for b in 0..map.num_bases {
-                let batch_val = transformed_batch[f_idx][(row_idx, b)];
+                let feat_val = transformed_feat[(row_idx, b)];
                 let row_val = transformed_row[offset + b];
                 assert!(
-                    (batch_val - row_val).abs() < 1e-5,
+                    (feat_val - row_val).abs() < 1e-5,
                     "Mismatch at row {} feat {} base {}",
                     row_idx,
                     f_idx,

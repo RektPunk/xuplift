@@ -4,7 +4,7 @@ use faer::prelude::Solve;
 use faer::{Col, ColRef, Mat, MatRef};
 use rayon::prelude::*;
 
-use crate::feature_map::KernelFeatureMap;
+use crate::xmodels::feature_map::KernelFeatureMap;
 
 /// A Binary Classifier using Nystrom features and Iteratively Reweighted Least Squares (IRLS).
 ///
@@ -41,7 +41,7 @@ impl Classifier {
         }
     }
 
-    /// Sigmoid function: sigma(x) = 1 / (1 + exp(-x))
+    /// Sigmoid function: $\sigma(x) = \frac{1}{1 + \exp(-x)}$
     fn sigmoid(x: f32) -> f32 {
         1.0 / (1.0 + (-x).exp())
     }
@@ -49,9 +49,9 @@ impl Classifier {
     /// Fits the binary classifier using the IRLS algorithm.
     ///
     /// This implementation uses target centering (y - mean) to align with the Regressor's logic.
-    /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column.
+    /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column:
+    /// $w_{new} = w_{old} + (Z^T R Z + \lambda I)^{-1} Z^T (y - \mu)$
     pub fn fit(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>) {
-        // Initialize and fit the kernel map
         let mut map = KernelFeatureMap::new();
         map.fit(x);
 
@@ -60,7 +60,7 @@ impl Classifier {
         let n_features = map.num_features;
         let n_bases = map.num_bases;
 
-        // Validate that the number of rows matches the number of target values
+        // Validate that the number of rows matches the number of target values and weights
         if n_samples != y.nrows() {
             panic!(
                 "Mismatched dimensions: The number of rows in X ({}) must match the number of target values ({}).",
@@ -69,18 +69,17 @@ impl Classifier {
             );
         }
 
-        // Calculate the mean of target 'y' and initialize base_value in logit space
+        // Initialize intercept in logit space based on target mean
         let mean_y = y.iter().sum::<f32>() / n_samples as f32;
         let eps = 1e-6;
         let p_clamped = mean_y.clamp(eps, 1.0 - eps);
         self.base_value = (p_clamped / (1.0 - p_clamped)).ln();
 
-        let total_dim = n_features * n_bases;
-
         // Initialize coefficients
+        let total_dim = n_features * n_bases;
         let mut w = Col::<f32>::zeros(total_dim);
 
-        // IRLS Iteration: Streaming approach to save memory
+        // IRLS Iteration: streaming accumulation to minimize memory peak
         for _ in 0..self.max_iter {
             let base_val = self.base_value;
             let (mut hessian, rhs, _) = (0..n_samples)
@@ -180,6 +179,7 @@ impl Classifier {
             .expect("Model must be fitted before prediction.");
         let n_samples = x.nrows();
         let n_features = map.num_features;
+        let n_bases = map.num_bases;
 
         if n_features != x.ncols() {
             panic!(
@@ -189,33 +189,26 @@ impl Classifier {
             );
         }
 
-        // Process in chunks to save memory
-        let chunk_size = 10000.min(n_samples);
-        let mut p_pred = Col::<f32>::zeros(n_samples);
+        let mut prediction = (0..n_features)
+            .into_par_iter()
+            .map(|f_idx| {
+                let mut z_f = Mat::<f32>::zeros(n_samples, n_bases);
+                map.transform_feature_into(x, f_idx, z_f.as_mut());
+                z_f * &self.coefficients[f_idx]
+            })
+            .reduce(
+                || Col::<f32>::zeros(n_samples),
+                |mut acc, res| {
+                    acc += res;
+                    acc
+                },
+            );
 
-        for start_row in (0..n_samples).step_by(chunk_size) {
-            let end_row = (start_row + chunk_size).min(n_samples);
-            let n_chunk = end_row - start_row;
-            let x_chunk = x.subrows(start_row, n_chunk);
-
-            let z_matrices = map.transform_per_feature(x_chunk);
-
-            let chunk_pred = (0..n_features)
-                .into_par_iter()
-                .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
-                .reduce(
-                    || Col::<f32>::zeros(n_chunk),
-                    |mut acc, res| {
-                        acc += res;
-                        acc
-                    },
-                );
-
-            for i in 0..n_chunk {
-                p_pred[start_row + i] = Self::sigmoid(chunk_pred[i] + self.base_value);
-            }
+        for i in 0..n_samples {
+            prediction[i] = Self::sigmoid(prediction[i] + self.base_value);
         }
-        p_pred
+
+        prediction
     }
 
     /// Explains the model's prediction by decomposing it into individual feature contributions.
@@ -229,6 +222,7 @@ impl Classifier {
             .expect("Model must be fitted before explanation.");
         let n_samples = x.nrows();
         let n_features = map.num_features;
+        let n_bases = map.num_bases;
 
         if n_features != x.ncols() {
             panic!(
@@ -238,28 +232,21 @@ impl Classifier {
             );
         }
 
-        // Process in chunks to save memory
-        let chunk_size = 10000.min(n_samples);
-        let mut contributions = Mat::<f32>::zeros(n_samples, n_features);
+        let mut contributions = vec![0.0f32; n_samples * n_features];
 
-        for start_row in (0..n_samples).step_by(chunk_size) {
-            let end_row = (start_row + chunk_size).min(n_samples);
-            let n_chunk = end_row - start_row;
-            let x_chunk = x.subrows(start_row, n_chunk);
-
-            let z_matrices = map.transform_per_feature(x_chunk);
-
-            let chunk_contributions: Vec<Col<f32>> = (0..n_features)
-                .into_par_iter()
-                .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
-                .collect();
-
-            for j in 0..n_features {
-                for i in 0..n_chunk {
-                    contributions[(start_row + i, j)] = chunk_contributions[j][i];
-                }
-            }
-        }
         contributions
+            .par_chunks_exact_mut(n_samples)
+            .enumerate()
+            .for_each(|(f_idx, col_slice)| {
+                let mut z_f = Mat::<f32>::zeros(n_samples, n_bases);
+                map.transform_feature_into(x, f_idx, z_f.as_mut());
+                let col_contrib = z_f * &self.coefficients[f_idx];
+
+                for i in 0..n_samples {
+                    col_slice[i] = col_contrib[i];
+                }
+            });
+
+        MatRef::from_column_major_slice(&contributions, n_samples, n_features).to_owned()
     }
 }

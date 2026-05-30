@@ -1,21 +1,8 @@
 use pyo3::prelude::*;
 
-pub mod feature_map;
 pub mod metalearners;
 pub mod python;
 pub mod xmodels;
-
-pub use crate::feature_map::KernelFeatureMap;
-pub use crate::metalearners::drlearner::DRLearner;
-pub use crate::metalearners::grlearner::GRLearner;
-pub use crate::metalearners::mlearner::MLearner;
-pub use crate::metalearners::pwlearner::PWLearner;
-pub use crate::metalearners::rlearner::RLearner;
-pub use crate::metalearners::slearner::SLearner;
-pub use crate::metalearners::tlearner::TLearner;
-pub use crate::metalearners::xlearner::XLearner;
-pub use crate::xmodels::classifier::Classifier;
-pub use crate::xmodels::regressor::Regressor;
 
 #[pymodule]
 fn xuplift(m: &Bound<'_, PyModule>) -> PyResult<()> {

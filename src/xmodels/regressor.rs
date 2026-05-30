@@ -4,7 +4,7 @@ use faer::prelude::Solve;
 use faer::{Col, ColRef, Mat, MatRef};
 use rayon::prelude::*;
 
-use crate::feature_map::KernelFeatureMap;
+use crate::xmodels::feature_map::KernelFeatureMap;
 
 /// A Ridge Regressor that uses transformed non-linear features.
 ///
@@ -46,10 +46,7 @@ impl Regressor {
     ///
     /// This method solves the system: $(Z^T W Z + \lambda I) \alpha = Z^T W (y - b)$
     /// where $W$ is a diagonal weight matrix.
-    ///
-    /// The system is solved efficiently using LDLT decomposition of the Hessian.
     pub fn fit_weighted(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>, weights: &Col<f32>) {
-        // Initialize and fit the kernel map if it hasn't been set yet
         let mut map = KernelFeatureMap::new();
         map.fit(x);
 
@@ -68,8 +65,8 @@ impl Regressor {
             );
         }
 
+        // The base_value $b$ is the weighted mean of the target $y$
         let total_weight: f32 = weights.iter().sum();
-        // The base_value $b$ is the weighted mean of the target $y$.
         self.base_value = if total_weight > 1e-6 {
             weights
                 .iter()
@@ -148,6 +145,7 @@ impl Regressor {
         // Store the kernel map
         self.kernel_feature_map = Some(Arc::new(map));
     }
+
     /// Predicts target values for the given feature matrix X.
     ///
     /// The prediction is: $\hat{y} = Z \alpha + b = \sum_{j} (Z_j \alpha_j) + b$.
@@ -158,6 +156,7 @@ impl Regressor {
             .expect("Model must be fitted before prediction.");
         let n_samples = x.nrows();
         let n_features = map.num_features;
+        let n_bases = map.num_bases;
 
         if n_features != x.ncols() {
             panic!(
@@ -167,34 +166,25 @@ impl Regressor {
             );
         }
 
-        // Process in chunks to save memory
-        let chunk_size = 10000.min(n_samples);
-        let mut prediction = Col::<f32>::zeros(n_samples);
+        let mut prediction = (0..n_features)
+            .into_par_iter()
+            .map(|f_idx| {
+                let mut z_f = Mat::<f32>::zeros(n_samples, n_bases);
+                map.transform_feature_into(x, f_idx, z_f.as_mut());
+                z_f * &self.coefficients[f_idx]
+            })
+            .reduce(
+                || Col::<f32>::zeros(n_samples),
+                |mut acc, res| {
+                    acc += res;
+                    acc
+                },
+            );
 
-        for start_row in (0..n_samples).step_by(chunk_size) {
-            let end_row = (start_row + chunk_size).min(n_samples);
-            let n_chunk = end_row - start_row;
-            let x_chunk = x.subrows(start_row, n_chunk);
-
-            // Map raw input to the feature space for this chunk
-            let z_matrices = map.transform_per_feature(x_chunk);
-
-            // Parallel computation for the chunk: y_pred = Sum(Z_i * coeff_i)
-            let chunk_pred = (0..n_features)
-                .into_par_iter()
-                .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
-                .reduce(
-                    || Col::<f32>::zeros(n_chunk),
-                    |mut acc, res| {
-                        acc += res;
-                        acc
-                    },
-                );
-
-            for i in 0..n_chunk {
-                prediction[start_row + i] = chunk_pred[i] + self.base_value;
-            }
+        for i in 0..n_samples {
+            prediction[i] += self.base_value;
         }
+
         prediction
     }
 
@@ -209,6 +199,7 @@ impl Regressor {
             .expect("Model must be fitted before explanation.");
         let n_samples = x.nrows();
         let n_features = map.num_features;
+        let n_bases = map.num_bases;
 
         if n_features != x.ncols() {
             panic!(
@@ -218,28 +209,21 @@ impl Regressor {
             );
         }
 
-        // Process in chunks to save memory
-        let chunk_size = 10000.min(n_samples);
-        let mut contributions = Mat::<f32>::zeros(n_samples, n_features);
+        let mut contributions = vec![0.0f32; n_samples * n_features];
 
-        for start_row in (0..n_samples).step_by(chunk_size) {
-            let end_row = (start_row + chunk_size).min(n_samples);
-            let n_chunk = end_row - start_row;
-            let x_chunk = x.subrows(start_row, n_chunk);
-
-            let z_matrices = map.transform_per_feature(x_chunk);
-
-            let chunk_contributions: Vec<Col<f32>> = (0..n_features)
-                .into_par_iter()
-                .map(|f_idx| &z_matrices[f_idx] * &self.coefficients[f_idx])
-                .collect();
-
-            for j in 0..n_features {
-                for i in 0..n_chunk {
-                    contributions[(start_row + i, j)] = chunk_contributions[j][i];
-                }
-            }
-        }
         contributions
+            .par_chunks_exact_mut(n_samples)
+            .enumerate()
+            .for_each(|(f_idx, col_slice)| {
+                let mut z_f = Mat::<f32>::zeros(n_samples, n_bases);
+                map.transform_feature_into(x, f_idx, z_f.as_mut());
+                let col_contrib = z_f * &self.coefficients[f_idx];
+
+                for i in 0..n_samples {
+                    col_slice[i] = col_contrib[i];
+                }
+            });
+
+        MatRef::from_column_major_slice(&contributions, n_samples, n_features).to_owned()
     }
 }
