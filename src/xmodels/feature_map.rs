@@ -3,6 +3,9 @@ use rand::rng;
 use rand::seq::SliceRandom;
 use rayon::prelude::*;
 
+const MAX_BASES: usize = 64;
+const MAX_DIST_PAIRS: usize = MAX_BASES * (MAX_BASES - 1) / 2;
+
 /// A transformer that approximates kernel feature maps using the Nystrom method.
 ///
 /// It maps input data into a finite-dimensional feature space where linear
@@ -33,9 +36,6 @@ pub struct KernelFeatureMap {
     /// Calculated using the Median Heuristic: $\gamma = \frac{1}{2\sigma^2}$
     pub s2_invs: Vec<f32>,
 }
-
-const MAX_BASES: usize = 64;
-const MAX_DIST_PAIRS: usize = MAX_BASES * (MAX_BASES - 1) / 2;
 
 impl KernelFeatureMap {
     /// Returns a new KernelFeatureMap instance
@@ -81,7 +81,7 @@ impl KernelFeatureMap {
             indices.shuffle(&mut rng);
             indices[..self.num_bases].to_vec()
         } else {
-            self.num_bases = n_samples.min(64);
+            self.num_bases = n_samples.min(MAX_BASES);
             let mut all_indices: Vec<usize> = (0..n_samples).collect();
             let mut rng = rng();
             all_indices.shuffle(&mut rng);
@@ -193,9 +193,9 @@ impl KernelFeatureMap {
 
     /// Transforms an entire row into the joint kernel feature space by concatenating all mapped features.
     ///
-    /// For a given row index and input matrix $x$, it computes the mapped feature for each feature $f$ and landmark $l$,
-    /// and stores it at the corresponding layout offset $f \cdot m + l$:
-    /// $$\text{out}[f \cdot m + l] = \left( \sum_{j=1}^m k(x_f, u_{f, j}) P_{f, jl} \right) - \mu_{f, l}$$
+    /// For a given row index and input matrix $x$, it computes the mapped feature for each feature $f$ and projection component $p$,
+    /// and stores it at the corresponding layout offset $f \cdot m + p$:
+    /// $$\text{out}[f \cdot m + p] = \left( \sum_{b=1}^m k(x_f, u_{f, b}) P_{f, bp} \right) - \mu_{f, p}$$
     /// where $m$ is `num_bases`, $k$ is the RBF kernel, $P_f$ is the projection matrix, and $\mu_f$ is the centering mean.
     pub fn transform_row_into(&self, x: MatRef<'_, f32>, row_idx: usize, mut out: ColMut<'_, f32>) {
         // Temporary buffer on the stack to store intermediate kernel calculations
@@ -207,8 +207,8 @@ impl KernelFeatureMap {
 
             // Handle missing values
             if x_val.is_nan() {
-                for j in 0..self.num_bases {
-                    out[offset + j] = 0.0;
+                for p_idx in 0..self.num_bases {
+                    out[offset + p_idx] = 0.0;
                 }
                 continue;
             }
@@ -219,18 +219,18 @@ impl KernelFeatureMap {
             let s2_inv = self.s2_invs[f_idx];
 
             // Pre-calculate RBF kernel distances between input and landmarks
-            for j in 0..self.num_bases {
-                let diff = x_val - bases[j];
-                kernel_cache[j] = (-(diff * diff) * s2_inv).exp();
+            for b_idx in 0..self.num_bases {
+                let diff = x_val - bases[b_idx];
+                kernel_cache[b_idx] = (-(diff * diff) * s2_inv).exp();
             }
 
             // Map into the learned Nystrom feature space via linear projection and centering
-            for l in 0..self.num_bases {
+            for p_idx in 0..self.num_bases {
                 let mut projection_sum = 0.0;
-                for j in 0..self.num_bases {
-                    projection_sum += kernel_cache[j] * proj[(j, l)];
+                for b_idx in 0..self.num_bases {
+                    projection_sum += kernel_cache[b_idx] * proj[(b_idx, p_idx)];
                 }
-                out[offset + l] = projection_sum - mean[l];
+                out[offset + p_idx] = projection_sum - mean[p_idx];
             }
         }
     }
@@ -238,8 +238,8 @@ impl KernelFeatureMap {
     /// Transforms a specific feature column across all rows into its Nystrom kernel feature space.
     ///
     /// For a given feature index $f$ and input matrix $x$, it computes the mapped feature
-    /// for each landmark $l$ and stores it in the output matrix at position $(i, l)$:
-    /// $$\text{out}[i, l] = \left( \sum_{j=1}^m k(x_{i, f}, u_{f, j}) P_{f, jl} \right) - \mu_{f, l}$$
+    /// for each projection component $p$ and stores it in the output matrix at position $(r, p)$:
+    /// $$\text{out}[r, p] = \left( \sum_{b=1}^m k(x_{r, f}, u_{f, b}) P_{f, bp} \right) - \mu_{f, p}$$
     /// where $m$ is `num_bases`, $k$ is the RBF kernel, $P_f$ is the projection matrix,
     /// and $\mu_f$ is the centering mean for that feature.
     pub fn transform_feature_into(
@@ -254,13 +254,13 @@ impl KernelFeatureMap {
         let mean = &self.feature_means[f_idx];
         let s2_inv = self.s2_invs[f_idx];
 
-        for i in 0..n_samples {
-            let x_val = x[(i, f_idx)];
+        for r_idx in 0..n_samples {
+            let x_val = x[(r_idx, f_idx)];
 
             // Handle missing values.
             if x_val.is_nan() {
-                for l in 0..self.num_bases {
-                    out[(i, l)] = 0.0;
+                for p_idx in 0..self.num_bases {
+                    out[(r_idx, p_idx)] = 0.0;
                 }
                 continue;
             }
@@ -270,18 +270,18 @@ impl KernelFeatureMap {
             let mut kernel_cache = [0.0f32; MAX_BASES];
 
             // Pre-calculate RBF kernel distances between input and landmarks
-            for j in 0..self.num_bases {
-                let diff = x_val - bases[j];
-                kernel_cache[j] = (-(diff * diff) * s2_inv).exp();
+            for b_idx in 0..self.num_bases {
+                let diff = x_val - bases[b_idx];
+                kernel_cache[b_idx] = (-(diff * diff) * s2_inv).exp();
             }
 
             // Map into the learned Nystrom feature space via linear projection and centering
-            for l in 0..self.num_bases {
+            for p_idx in 0..self.num_bases {
                 let mut projection_sum = 0.0;
-                for j in 0..self.num_bases {
-                    projection_sum += kernel_cache[j] * proj[(j, l)];
+                for b_idx in 0..self.num_bases {
+                    projection_sum += kernel_cache[b_idx] * proj[(b_idx, p_idx)];
                 }
-                out[(i, l)] = projection_sum - mean[l];
+                out[(r_idx, p_idx)] = projection_sum - mean[p_idx];
             }
         }
     }
