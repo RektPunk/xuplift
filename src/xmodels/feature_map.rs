@@ -34,6 +34,9 @@ pub struct KernelFeatureMap {
     pub s2_invs: Vec<f32>,
 }
 
+const MAX_BASES: usize = 64;
+const MAX_DIST_PAIRS: usize = MAX_BASES * (MAX_BASES - 1) / 2;
+
 impl KernelFeatureMap {
     /// Returns a new KernelFeatureMap instance
     pub fn new() -> Self {
@@ -70,9 +73,9 @@ impl KernelFeatureMap {
             .collect();
         let n_valid = valid_row_indices.len();
 
-        // Select landmarks (defaults to min(N, 64) for efficiency)
-        let landmark_indices = if n_valid >= 32 {
-            self.num_bases = n_valid.min(64);
+        // Select landmarks (defaults to min(N, MAX_BASES) for efficiency)
+        let landmark_indices = if n_valid >= MAX_BASES / 2 {
+            self.num_bases = n_valid.min(MAX_BASES);
             let mut rng = rng();
             let mut indices = valid_row_indices.clone();
             indices.shuffle(&mut rng);
@@ -91,7 +94,8 @@ impl KernelFeatureMap {
                 let f_mean = raw_feature_means[f_idx];
 
                 // Median Heuristic: sets sigma to the median of pairwise distances between landmarks
-                let mut dists = Vec::with_capacity(self.num_bases * self.num_bases / 2);
+                let mut dists_buf = [0.0f32; MAX_DIST_PAIRS];
+                let mut dists_count = 0;
                 for i in 0..self.num_bases {
                     let val_i = {
                         let v = x[(landmark_indices[i], f_idx)];
@@ -102,9 +106,11 @@ impl KernelFeatureMap {
                             let v = x[(landmark_indices[j], f_idx)];
                             if v.is_nan() { f_mean } else { v }
                         };
-                        dists.push((val_i - val_j).abs());
+                        dists_buf[dists_count] = (val_i - val_j).abs();
+                        dists_count += 1;
                     }
                 }
+                let dists = &mut dists_buf[..dists_count];
                 dists.sort_by(|a, b| a.total_cmp(b));
                 let median = if !dists.is_empty() {
                     let mid = dists.len() / 2;
@@ -193,8 +199,8 @@ impl KernelFeatureMap {
     /// where $m$ is `num_bases`, $k$ is the RBF kernel, $P_f$ is the projection matrix, and $\mu_f$ is the centering mean.
     pub fn transform_row_into(&self, x: MatRef<'_, f32>, row_idx: usize, mut out: ColMut<'_, f32>) {
         // Temporary buffer on the stack to store intermediate kernel calculations
-        // Capped at 64 as per the Nystrom landmark selection logic
-        let mut kernel_cache = [0.0f32; 64];
+        // Capped at MAX_BASES as per the Nystrom landmark selection logic
+        let mut kernel_cache = [0.0f32; MAX_BASES];
         for f_idx in 0..self.num_features {
             let x_val = x[(row_idx, f_idx)];
             let offset = f_idx * self.num_bases;
@@ -260,8 +266,8 @@ impl KernelFeatureMap {
             }
 
             // Temporary buffer on the stack to store intermediate kernel calculations
-            // Capped at 64 as per the Nystrom landmark selection logic
-            let mut kernel_cache = [0.0f32; 64];
+            // Capped at MAX_BASES as per the Nystrom landmark selection logic
+            let mut kernel_cache = [0.0f32; MAX_BASES];
 
             // Pre-calculate RBF kernel distances between input and landmarks
             for j in 0..self.num_bases {
