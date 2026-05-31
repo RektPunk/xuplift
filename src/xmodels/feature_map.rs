@@ -3,9 +3,6 @@ use rand::rng;
 use rand::seq::SliceRandom;
 use rayon::prelude::*;
 
-const MAX_BASES: usize = 64;
-const MAX_DIST_PAIRS: usize = MAX_BASES * (MAX_BASES - 1) / 2;
-
 /// A transformer that approximates kernel feature maps using the Nystrom method.
 ///
 /// It maps input data into a finite-dimensional feature space where linear
@@ -38,6 +35,9 @@ pub struct KernelFeatureMap {
 }
 
 impl KernelFeatureMap {
+    const MAX_BASES: usize = 64;
+    const MAX_DIST_PAIRS: usize = Self::MAX_BASES * (Self::MAX_BASES - 1) / 2;
+
     /// Returns a new KernelFeatureMap instance
     pub fn new() -> Self {
         Self::default()
@@ -74,14 +74,14 @@ impl KernelFeatureMap {
         let n_valid = valid_row_indices.len();
 
         // Select landmarks (defaults to min(N, MAX_BASES) for efficiency)
-        let landmark_indices = if n_valid >= MAX_BASES / 2 {
-            self.num_bases = n_valid.min(MAX_BASES);
+        let landmark_indices = if n_valid >= Self::MAX_BASES / 2 {
+            self.num_bases = n_valid.min(Self::MAX_BASES);
             let mut rng = rng();
             let mut indices = valid_row_indices.clone();
             indices.shuffle(&mut rng);
             indices[..self.num_bases].to_vec()
         } else {
-            self.num_bases = n_samples.min(MAX_BASES);
+            self.num_bases = n_samples.min(Self::MAX_BASES);
             let mut all_indices: Vec<usize> = (0..n_samples).collect();
             let mut rng = rng();
             all_indices.shuffle(&mut rng);
@@ -94,7 +94,7 @@ impl KernelFeatureMap {
                 let f_mean = raw_feature_means[f_idx];
 
                 // Median Heuristic: sets sigma to the median of pairwise distances between landmarks
-                let mut dists_buf = [0.0f32; MAX_DIST_PAIRS];
+                let mut dists_buf = [0.0f32; Self::MAX_DIST_PAIRS];
                 let mut dists_count = 0;
                 for i in 0..self.num_bases {
                     let val_i = {
@@ -200,7 +200,7 @@ impl KernelFeatureMap {
     pub fn transform_row_into(&self, x: MatRef<'_, f32>, row_idx: usize, mut out: ColMut<'_, f32>) {
         // Temporary buffer on the stack to store intermediate kernel calculations
         // Capped at MAX_BASES as per the Nystrom landmark selection logic
-        let mut kernel_cache = [0.0f32; MAX_BASES];
+        let mut kernel_cache = [0.0f32; Self::MAX_BASES];
         for f_idx in 0..self.num_features {
             let x_val = x[(row_idx, f_idx)];
             let offset = f_idx * self.num_bases;
@@ -267,7 +267,7 @@ impl KernelFeatureMap {
 
             // Temporary buffer on the stack to store intermediate kernel calculations
             // Capped at MAX_BASES as per the Nystrom landmark selection logic
-            let mut kernel_cache = [0.0f32; MAX_BASES];
+            let mut kernel_cache = [0.0f32; Self::MAX_BASES];
 
             // Pre-calculate RBF kernel distances between input and landmarks
             for b_idx in 0..self.num_bases {
