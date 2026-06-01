@@ -55,8 +55,8 @@ impl KernelFeatureMap {
                 let col = x.col(f_idx);
                 let mut sum = 0.0;
                 let mut count = 0;
-                for i in 0..n_samples {
-                    let val = col[i];
+                for r_idx in 0..n_samples {
+                    let val = col[r_idx];
                     if !val.is_nan() {
                         sum += val;
                         count += 1;
@@ -96,14 +96,14 @@ impl KernelFeatureMap {
                 // Median Heuristic: sets sigma to the median of pairwise distances between landmarks
                 let mut dists_buf = [0.0f32; Self::MAX_DIST_PAIRS];
                 let mut dists_count = 0;
-                for i in 0..self.num_bases {
+                for b_i_idx in 0..self.num_bases {
                     let val_i = {
-                        let v = x[(landmark_indices[i], f_idx)];
+                        let v = x[(landmark_indices[b_i_idx], f_idx)];
                         if v.is_nan() { f_mean } else { v }
                     };
-                    for j in i + 1..self.num_bases {
+                    for b_j_idx in b_i_idx + 1..self.num_bases {
                         let val_j = {
-                            let v = x[(landmark_indices[j], f_idx)];
+                            let v = x[(landmark_indices[b_j_idx], f_idx)];
                             if v.is_nan() { f_mean } else { v }
                         };
                         dists_buf[dists_count] = (val_i - val_j).abs();
@@ -128,20 +128,22 @@ impl KernelFeatureMap {
 
                 // Store landmark values
                 let mut bases = Col::<f32>::zeros(self.num_bases);
-                for (j_idx, &row_idx) in landmark_indices.iter().enumerate() {
+                for (b_j_idx, &row_idx) in landmark_indices.iter().enumerate() {
                     let val = x[(row_idx, f_idx)];
-                    bases[j_idx] = if val.is_nan() { f_mean } else { val };
+                    bases[b_j_idx] = if val.is_nan() { f_mean } else { val };
                 }
 
                 // Compute Landmark Kernel matrix K_mm: $k_{ij} = \exp(-\gamma ||u_i - u_j||^2)$
                 let mut k_mm = Mat::<f32>::zeros(self.num_bases, self.num_bases);
-                for i in 0..self.num_bases {
-                    for j in i..self.num_bases {
-                        let diff = bases[i] - bases[j];
+                for b_i_idx in 0..self.num_bases {
+                    for b_j_idx in b_i_idx..self.num_bases {
+                        let diff = bases[b_i_idx] - bases[b_j_idx];
                         let val = (-(diff * diff) * s2_inv).exp();
-                        k_mm[(i, j)] = val;
-                        if i != j {
-                            k_mm[(j, i)] = val;
+                        k_mm[(b_i_idx, b_j_idx)] = val;
+
+                        // Symmetric: k_ij = k_ji
+                        if b_i_idx != b_j_idx {
+                            k_mm[(b_j_idx, b_i_idx)] = val;
                         }
                     }
                 }
@@ -149,34 +151,36 @@ impl KernelFeatureMap {
                 // Eigen-decomposition for symmetric inverse square root: $K_{mm}^{-1/2} = U \Lambda^{-1/2} U^T$
                 // This ensures that the transformed features are approximately orthonormal
                 let eig = k_mm.self_adjoint_eigen(faer::Side::Lower).unwrap();
-                let mut inv_s = Mat::<f32>::zeros(self.num_bases, self.num_bases);
-                for d in 0..self.num_bases {
-                    let val = eig.S()[d];
-                    inv_s[(d, d)] = if val > 1e-10 { 1.0 / val.sqrt() } else { 0.0 };
-                }
+                let mut proj_matrix = eig.U().to_owned();
 
-                let proj_matrix = eig.U() * &inv_s;
+                for b_j_idx in 0..self.num_bases {
+                    let val = eig.S()[b_j_idx];
+                    let inv_sqrt_s = if val > 1e-10 { 1.0 / val.sqrt() } else { 0.0 };
+                    // Efficiently scale each column by the inverse square root of eigenvalues
+                    for b_i_idx in 0..self.num_bases {
+                        proj_matrix[(b_i_idx, b_j_idx)] *= inv_sqrt_s;
+                    }
+                }
 
                 // Compute feature means for centering without storing full $Z$ matrix
                 // Since $Z = K_{nm} P$, the column means are:
-                // $\text{mean}(Z) = \text{mean}(K_{nm}) P$
+                // $\text{mean}(Z) = \text{mean}(K_{nm}) P = (\frac{1}{n} \sum k_{i}) P$
                 let mut k_col_sums = Col::<f32>::zeros(self.num_bases);
-                for i in 0..n_samples {
-                    let x_val = x[(i, f_idx)];
+                for r_idx in 0..n_samples {
+                    let x_val = x[(r_idx, f_idx)];
                     if !x_val.is_nan() {
-                        for j in 0..self.num_bases {
-                            let diff = x_val - bases[j];
-                            k_col_sums[j] += (-(diff * diff) * s2_inv).exp();
+                        for b_idx in 0..self.num_bases {
+                            let diff = x_val - bases[b_idx];
+                            k_col_sums[b_idx] += (-(diff * diff) * s2_inv).exp();
                         }
                     }
                 }
-                let mut z_col_means = Col::<f32>::zeros(self.num_bases);
-                for l in 0..self.num_bases {
-                    let mut sum = 0.0;
-                    for j in 0..self.num_bases {
-                        sum += k_col_sums[j] * proj_matrix[(j, l)];
-                    }
-                    z_col_means[l] = sum / n_samples as f32;
+
+                // Compute z_col_means using matrix-vector multiplication: z_col_means = P^T * (k_col_sums / n)
+                let mut z_col_means = proj_matrix.transpose() * &k_col_sums;
+                let scale = 1.0 / n_samples as f32;
+                for b_idx in 0..self.num_bases {
+                    z_col_means[b_idx] *= scale;
                 }
 
                 (bases, proj_matrix, z_col_means, s2_inv)
