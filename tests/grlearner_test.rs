@@ -17,24 +17,24 @@ fn test_grlearner() {
     // t = 2.0 * x0 + Noise_T
     // y = 1.5 * x0 + 0.5 * sin(x1) + (5.0 * t) + 10.0 + Noise_Y
     // Ground Truth Uplift (CATE Slope): 5.0
-    for i in 0..n_samples {
-        let x0 = i as f32 * 0.01;
-        let x1 = (i as f32).sin();
-        let x2 = (i as f32).cos();
+    for r_idx in 0..n_samples {
+        let x0 = r_idx as f32 * 0.01;
+        let x1 = (r_idx as f32).sin();
+        let x2 = (r_idx as f32).cos();
 
-        x[(i, 0)] = x0;
-        x[(i, 1)] = x1;
-        x[(i, 2)] = x2;
+        x[(r_idx, 0)] = x0;
+        x[(r_idx, 1)] = x1;
+        x[(r_idx, 2)] = x2;
 
         // Continuous Treatment with confounding bias (dependent on x0)
         // Even/Odd patterns inject clean variation around the confounder line
-        let treatment_noise = if i % 2 == 0 { 0.5 } else { -0.5 };
+        let treatment_noise = if r_idx % 2 == 0 { 0.5 } else { -0.5 };
         let treatment = 2.0 * x0 + treatment_noise;
-        t[i] = treatment;
+        t[r_idx] = treatment;
 
         // Outcome y with a true treatment effect multiplier of 5.0
-        let outcome_noise = if i % 3 == 0 { 0.1 } else { -0.1 };
-        y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0 + outcome_noise;
+        let outcome_noise = if r_idx % 3 == 0 { 0.1 } else { -0.1 };
+        y[r_idx] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0 + outcome_noise;
     }
 
     // --- Model Initialization ---
@@ -46,8 +46,8 @@ fn test_grlearner() {
 
     // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
-    for i in 0..n_samples {
-        sum_uplift += uplift_estimate[i];
+    for r_idx in 0..n_samples {
+        sum_uplift += uplift_estimate[r_idx];
     }
     let avg_uplift = sum_uplift / n_samples as f32;
 
@@ -69,20 +69,20 @@ fn test_grlearner() {
     assert_eq!(uplift_explanation.ncols(), n_features);
 
     let base_value = grlearner.tau.base_value;
-    for i in 0..x.nrows() {
+    for r_idx in 0..x.nrows() {
         let mut explained_total = 0.0;
-        for j in 0..uplift_explanation.ncols() {
-            explained_total += uplift_explanation[(i, j)];
+        for p_idx in 0..uplift_explanation.ncols() {
+            explained_total += uplift_explanation[(r_idx, p_idx)];
         }
 
         // Reconstructed Uplift = sum(feature_contributions) + base_value
         let total_reconstructed_uplift = explained_total + base_value;
         assert!(
-            (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
+            (total_reconstructed_uplift - uplift_estimate[r_idx]).abs() < 1e-4,
             "Uplift explanation delta mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
-            i,
+            r_idx,
             total_reconstructed_uplift,
-            uplift_estimate[i]
+            uplift_estimate[r_idx]
         );
     }
     println!("GRLearner verification passed!");

@@ -24,15 +24,15 @@ fn test_gaussian_classification() {
     };
 
     // Generate Gaussian Blobs
-    for i in 0..n_samples {
-        if i < n_samples / 2 {
-            x[(i, 0)] = sample_normal(-1.5, 0.7);
-            x[(i, 1)] = sample_normal(-1.5, 0.7);
-            y[i] = 0.0;
+    for r_idx in 0..n_samples {
+        if r_idx < n_samples / 2 {
+            x[(r_idx, 0)] = sample_normal(-1.5, 0.7);
+            x[(r_idx, 1)] = sample_normal(-1.5, 0.7);
+            y[r_idx] = 0.0;
         } else {
-            x[(i, 0)] = sample_normal(1.5, 0.7);
-            x[(i, 1)] = sample_normal(1.5, 0.7);
-            y[i] = 1.0;
+            x[(r_idx, 0)] = sample_normal(1.5, 0.7);
+            x[(r_idx, 1)] = sample_normal(1.5, 0.7);
+            y[r_idx] = 1.0;
         }
     }
 
@@ -43,9 +43,9 @@ fn test_gaussian_classification() {
     // --- Verification: Accuracy ---
     let p_pred = model.predict(x.as_ref());
     let mut correct = 0;
-    for i in 0..n_samples {
-        let pred = if p_pred[i] > 0.5 { 1.0 } else { 0.0 };
-        if (pred - y[i]).abs() < 1e-5 {
+    for r_idx in 0..n_samples {
+        let pred = if p_pred[r_idx] > 0.5 { 1.0 } else { 0.0 };
+        if (pred - y[r_idx]).abs() < 1e-5 {
             correct += 1;
         }
     }
@@ -60,11 +60,11 @@ fn test_gaussian_classification() {
     // Sigmoid(Sum(Contributions) + Base_Value) == Prediction_Probability
     let uplift_explanation = model.explain(x.as_ref());
 
-    for i in 0..n_samples {
+    for r_idx in 0..n_samples {
         // Sum of logit-scale contributions for each feature
         let mut logit_sum = 0.0;
-        for j in 0..n_features {
-            logit_sum += uplift_explanation[(i, j)];
+        for p_idx in 0..n_features {
+            logit_sum += uplift_explanation[(r_idx, p_idx)];
         }
 
         // Add the global bias (intercept) to the sum of contributions
@@ -75,11 +75,11 @@ fn test_gaussian_classification() {
 
         // Check if the reconstructed probability matches the model's direct prediction
         assert!(
-            (total_reconstructed_prob - p_pred[i]).abs() < 1e-4,
+            (total_reconstructed_prob - p_pred[r_idx]).abs() < 1e-4,
             "Sample {}: Explanation consistency failed. Rec: {:.4}, Prob: {:.4}",
-            i,
+            r_idx,
             total_reconstructed_prob,
-            p_pred[i]
+            p_pred[r_idx]
         );
     }
     println!("Classifier verification passed!");
@@ -93,14 +93,14 @@ fn test_classifier_with_nans() {
     let mut y = Col::<f32>::zeros(n_samples);
 
     // --- Synthetic Data Generation ---
-    for i in 0..n_samples {
-        x[(i, 0)] = i as f32;
-        x[(i, 1)] = if i % 10 == 0 {
+    for r_idx in 0..n_samples {
+        x[(r_idx, 0)] = r_idx as f32;
+        x[(r_idx, 1)] = if r_idx % 10 == 0 {
             f32::NAN
         } else {
-            (i as f32).sin()
+            (r_idx as f32).sin()
         };
-        y[i] = if i < n_samples / 2 { 0.0 } else { 1.0 };
+        y[r_idx] = if r_idx < n_samples / 2 { 0.0 } else { 1.0 };
     }
 
     // --- Model Initialization ---
@@ -110,11 +110,11 @@ fn test_classifier_with_nans() {
     // --- Verification ---
     // Check if predictions for NaN rows are still returning values
     let p_pred = model.predict(x.as_ref());
-    for i in 0..n_samples {
+    for r_idx in 0..n_samples {
         assert!(
-            !p_pred[i].is_nan(),
+            !p_pred[r_idx].is_nan(),
             "Probability should not be NaN for sample {}",
-            i
+            r_idx
         );
     }
 }

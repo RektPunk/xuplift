@@ -91,17 +91,17 @@ impl Regressor {
                         Col::<f32>::zeros(total_dim),
                     )
                 },
-                |(mut acc_h, mut acc_g, mut z_r), r| {
-                    map.transform_row_into(x, r, z_r.as_mut());
-                    let w = weights[r];
-                    let y_c = y[r] - self.base_value;
+                |(mut acc_h, mut acc_g, mut z_r), r_idx| {
+                    map.transform_row_into(x, r_idx, z_r.as_mut());
+                    let w = weights[r_idx];
+                    let y_c = y[r_idx] - self.base_value;
 
-                    for i in 0..total_dim {
-                        let z_i = z_r[i];
-                        acc_g[i] += z_i * w * y_c;
+                    for p_i_idx in 0..total_dim {
+                        let z_i = z_r[p_i_idx];
+                        acc_g[p_i_idx] += z_i * w * y_c;
                         let val_i = z_i * w;
-                        for j in 0..total_dim {
-                            acc_h[(i, j)] += val_i * z_r[j];
+                        for p_j_idx in 0..total_dim {
+                            acc_h[(p_i_idx, p_j_idx)] += val_i * z_r[p_j_idx];
                         }
                     }
                     (acc_h, acc_g, z_r)
@@ -116,10 +116,10 @@ impl Regressor {
                     )
                 },
                 |(mut h1, mut g1, _), (h2, g2, _)| {
-                    for j in 0..total_dim {
-                        g1[j] += g2[j];
-                        for i in 0..total_dim {
-                            h1[(i, j)] += h2[(i, j)];
+                    for p_j_idx in 0..total_dim {
+                        g1[p_j_idx] += g2[p_j_idx];
+                        for p_i_idx in 0..total_dim {
+                            h1[(p_i_idx, p_j_idx)] += h2[(p_i_idx, p_j_idx)];
                         }
                     }
                     (h1, g1, Col::<f32>::zeros(0))
@@ -127,8 +127,8 @@ impl Regressor {
             );
 
         // Add L2 regularization (Ridge) to the diagonal
-        for i in 0..total_dim {
-            ridge_lhs[(i, i)] += self.penalty;
+        for p_idx in 0..total_dim {
+            ridge_lhs[(p_idx, p_idx)] += self.penalty;
         }
 
         // Solve the linear system using LDLT decomposition
@@ -181,8 +181,8 @@ impl Regressor {
                 },
             );
 
-        for i in 0..n_samples {
-            prediction[i] += self.base_value;
+        for r_idx in 0..n_samples {
+            prediction[r_idx] += self.base_value;
         }
 
         prediction
@@ -219,8 +219,8 @@ impl Regressor {
                 map.transform_feature_into(x, f_idx, z_f.as_mut());
                 let col_contrib = z_f * &self.coefficients[f_idx];
 
-                for i in 0..n_samples {
-                    col_slice[i] = col_contrib[i];
+                for r_idx in 0..n_samples {
+                    col_slice[r_idx] = col_contrib[r_idx];
                 }
             });
 

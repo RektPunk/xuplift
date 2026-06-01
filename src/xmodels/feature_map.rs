@@ -128,8 +128,8 @@ impl KernelFeatureMap {
 
                 // Store landmark values
                 let mut bases = Col::<f32>::zeros(self.num_bases);
-                for (b_idx, &row_idx) in landmark_indices.iter().enumerate() {
-                    let val = x[(row_idx, f_idx)];
+                for (b_idx, &r_idx) in landmark_indices.iter().enumerate() {
+                    let val = x[(r_idx, f_idx)];
                     bases[b_idx] = if val.is_nan() { f_mean } else { val };
                 }
 
@@ -201,12 +201,12 @@ impl KernelFeatureMap {
     /// and stores it at the corresponding layout offset $f \cdot m + p$:
     /// $$\text{out}[f \cdot m + p] = \left( \sum_{b=1}^m k(x_f, u_{f, b}) P_{f, bp} \right) - \mu_{f, p}$$
     /// where $m$ is `num_bases`, $k$ is the RBF kernel, $P_f$ is the projection matrix, and $\mu_f$ is the centering mean.
-    pub fn transform_row_into(&self, x: MatRef<'_, f32>, row_idx: usize, mut out: ColMut<'_, f32>) {
+    pub fn transform_row_into(&self, x: MatRef<'_, f32>, r_idx: usize, mut out: ColMut<'_, f32>) {
         // Temporary buffer on the stack to store intermediate kernel calculations
         // Capped at MAX_BASES as per the Nystrom landmark selection logic
         let mut kernel_cache = [0.0f32; Self::MAX_BASES];
         for f_idx in 0..self.num_features {
-            let x_val = x[(row_idx, f_idx)];
+            let x_val = x[(r_idx, f_idx)];
             let offset = f_idx * self.num_bases;
 
             // Handle missing values
