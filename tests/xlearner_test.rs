@@ -15,22 +15,22 @@ fn test_xlearner() {
     // Objective: Simulate a scenario where Treatment (T=1) is rare.
     // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
     // Ground Truth Uplift (ITE): 5.0
-    for i in 0..n_samples {
-        let x0 = i as f32 * 0.02;
-        let x1 = (i as f32 * 0.1).cos();
-        let x2 = (i as f32 * 0.1).sin();
+    for r_idx in 0..n_samples {
+        let x0 = r_idx as f32 * 0.02;
+        let x1 = (r_idx as f32 * 0.1).cos();
+        let x2 = (r_idx as f32 * 0.1).sin();
 
-        x[(i, 0)] = x0;
-        x[(i, 1)] = x1;
-        x[(i, 2)] = x2;
+        x[(r_idx, 0)] = x0;
+        x[(r_idx, 1)] = x1;
+        x[(r_idx, 2)] = x2;
 
         // Intentional Imbalance: Only 20% receive treatment
         // X-Learner should handle the 20/80 imbalance well
-        let treatment = if i % 5 == 0 { 1.0 } else { 0.0 };
-        t[i] = treatment;
+        let treatment = if r_idx % 5 == 0 { 1.0 } else { 0.0 };
+        t[r_idx] = treatment;
 
         // Outcome with a constant treatment effect of 5.0
-        y[i] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
+        y[r_idx] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
     // --- Model Initialization ---
@@ -43,8 +43,8 @@ fn test_xlearner() {
 
     // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
-    for i in 0..n_samples {
-        sum_uplift += uplift_estimate[i];
+    for r_idx in 0..n_samples {
+        sum_uplift += uplift_estimate[r_idx];
     }
     let avg_uplift = sum_uplift / n_samples as f32;
 
@@ -69,25 +69,25 @@ fn test_xlearner() {
 
     let p_pred = xlearner.p.predict(x.as_ref());
 
-    for i in 0..x.nrows() {
+    for r_idx in 0..x.nrows() {
         let mut explained_total = 0.0;
-        for j in 0..n_features {
-            explained_total += uplift_explanation[(i, j)];
+        for p_idx in 0..n_features {
+            explained_total += uplift_explanation[(r_idx, p_idx)];
         }
 
         // Reconstructed Uplift = sum(weighted_feature_contributions) + dynamic_base_value
         // Dynamic Base Value: g(x)*base_tau0 + (1-g(x))*base_tau1
-        let gi = p_pred[i].clamp(0.01, 0.99);
+        let gi = p_pred[r_idx].clamp(0.01, 0.99);
         let dynamic_base =
             gi * xlearner.tau_t0.base_value + (1.0 - gi) * xlearner.tau_t1.base_value;
 
         let total_reconstructed_uplift = explained_total + dynamic_base;
         assert!(
-            (total_reconstructed_uplift - uplift_estimate[i]).abs() < 1e-4,
+            (total_reconstructed_uplift - uplift_estimate[r_idx]).abs() < 1e-4,
             "X-Learner explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
-            i,
+            r_idx,
             total_reconstructed_uplift,
-            uplift_estimate[i]
+            uplift_estimate[r_idx]
         );
     }
     println!("XLearner verification passed!");

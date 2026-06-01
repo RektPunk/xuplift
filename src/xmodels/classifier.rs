@@ -92,25 +92,25 @@ impl Classifier {
                             Col::<f32>::zeros(total_dim),
                         )
                     },
-                    |(mut acc_h, mut acc_g, mut z_r), r| {
-                        map.transform_row_into(x, r, z_r.as_mut());
+                    |(mut acc_h, mut acc_g, mut z_r), r_idx| {
+                        map.transform_row_into(x, r_idx, z_r.as_mut());
 
                         // Linear prediction: raw_pred = z^T * w + base_value
                         let mut raw_pred = base_val;
-                        for i in 0..total_dim {
-                            raw_pred += z_r[i] * w[i];
+                        for p_idx in 0..total_dim {
+                            raw_pred += z_r[p_idx] * w[p_idx];
                         }
 
                         let prob = Self::sigmoid(raw_pred);
                         let r_val = (prob * (1.0 - prob)).max(1e-5);
-                        let err = y[r] - prob;
+                        let err = y[r_idx] - prob;
 
-                        for k in 0..total_dim {
-                            let z_k = z_r[k];
-                            acc_g[k] += z_k * err;
+                        for p_i_idx in 0..total_dim {
+                            let z_k = z_r[p_i_idx];
+                            acc_g[p_i_idx] += z_k * err;
                             let val_k = z_k * r_val;
-                            for l in 0..total_dim {
-                                acc_h[(k, l)] += val_k * z_r[l];
+                            for p_j_idx in 0..total_dim {
+                                acc_h[(p_i_idx, p_j_idx)] += val_k * z_r[p_j_idx];
                             }
                         }
                         (acc_h, acc_g, z_r)
@@ -125,10 +125,10 @@ impl Classifier {
                         )
                     },
                     |(mut h1, mut g1, _), (h2, g2, _)| {
-                        for j in 0..total_dim {
-                            g1[j] += g2[j];
-                            for i in 0..total_dim {
-                                h1[(i, j)] += h2[(i, j)];
+                        for p_j_idx in 0..total_dim {
+                            g1[p_j_idx] += g2[p_j_idx];
+                            for p_i_idx in 0..total_dim {
+                                h1[(p_i_idx, p_j_idx)] += h2[(p_i_idx, p_j_idx)];
                             }
                         }
                         (h1, g1, Col::<f32>::zeros(0))
@@ -136,8 +136,8 @@ impl Classifier {
                 );
 
             // Add L2 regularization (Ridge)
-            for i in 0..total_dim {
-                hessian[(i, i)] += self.penalty;
+            for p_idx in 0..total_dim {
+                hessian[(p_idx, p_idx)] += self.penalty;
             }
 
             // Solve the normal equations (H * delta_w = gradient) using LDLT decomposition
@@ -204,8 +204,8 @@ impl Classifier {
                 },
             );
 
-        for i in 0..n_samples {
-            prediction[i] = Self::sigmoid(prediction[i] + self.base_value);
+        for r_idx in 0..n_samples {
+            prediction[r_idx] = Self::sigmoid(prediction[r_idx] + self.base_value);
         }
 
         prediction
@@ -242,8 +242,8 @@ impl Classifier {
                 map.transform_feature_into(x, f_idx, z_f.as_mut());
                 let col_contrib = z_f * &self.coefficients[f_idx];
 
-                for i in 0..n_samples {
-                    col_slice[i] = col_contrib[i];
+                for r_idx in 0..n_samples {
+                    col_slice[r_idx] = col_contrib[r_idx];
                 }
             });
 

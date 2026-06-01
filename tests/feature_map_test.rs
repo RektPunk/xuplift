@@ -48,19 +48,19 @@ fn test_transform_row_matches_feature_transform() {
         let mut transformed_feat = Mat::<f32>::zeros(5, map.num_bases);
         map.transform_feature_into(data.as_ref(), f_idx, transformed_feat.as_mut());
 
-        for row_idx in 0..5 {
+        for r_idx in 0..5 {
             let total_dim = map.num_features * map.num_bases;
             let mut transformed_row = Col::<f32>::zeros(total_dim);
-            map.transform_row_into(data.as_ref(), row_idx, transformed_row.as_mut());
+            map.transform_row_into(data.as_ref(), r_idx, transformed_row.as_mut());
 
             let offset = f_idx * map.num_bases;
             for b in 0..map.num_bases {
-                let feat_val = transformed_feat[(row_idx, b)];
+                let feat_val = transformed_feat[(r_idx, b)];
                 let row_val = transformed_row[offset + b];
                 assert!(
                     (feat_val - row_val).abs() < 1e-5,
                     "Mismatch at row {} feat {} base {}",
-                    row_idx,
+                    r_idx,
                     f_idx,
                     b
                 );
