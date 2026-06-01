@@ -128,9 +128,9 @@ impl KernelFeatureMap {
 
                 // Store landmark values
                 let mut bases = Col::<f32>::zeros(self.num_bases);
-                for (b_j_idx, &row_idx) in landmark_indices.iter().enumerate() {
+                for (b_idx, &row_idx) in landmark_indices.iter().enumerate() {
                     let val = x[(row_idx, f_idx)];
-                    bases[b_j_idx] = if val.is_nan() { f_mean } else { val };
+                    bases[b_idx] = if val.is_nan() { f_mean } else { val };
                 }
 
                 // Compute Landmark Kernel matrix K_mm: $k_{ij} = \exp(-\gamma ||u_i - u_j||^2)$
@@ -153,12 +153,12 @@ impl KernelFeatureMap {
                 let eig = k_mm.self_adjoint_eigen(faer::Side::Lower).unwrap();
                 let mut proj_matrix = eig.U().to_owned();
 
-                for b_j_idx in 0..self.num_bases {
-                    let val = eig.S()[b_j_idx];
+                for p_idx in 0..self.num_bases {
+                    let val = eig.S()[p_idx];
                     let inv_sqrt_s = if val > 1e-10 { 1.0 / val.sqrt() } else { 0.0 };
                     // Efficiently scale each column by the inverse square root of eigenvalues
-                    for b_i_idx in 0..self.num_bases {
-                        proj_matrix[(b_i_idx, b_j_idx)] *= inv_sqrt_s;
+                    for b_idx in 0..self.num_bases {
+                        proj_matrix[(b_idx, p_idx)] *= inv_sqrt_s;
                     }
                 }
 
@@ -187,11 +187,11 @@ impl KernelFeatureMap {
             })
             .collect();
 
-        for (b, p, o, s) in feature_params {
-            self.feature_bases.push(b);
-            self.proj_matrices.push(p);
-            self.feature_means.push(o);
-            self.s2_invs.push(s);
+        for (bases, proj, means, s2_inv) in feature_params {
+            self.feature_bases.push(bases);
+            self.proj_matrices.push(proj);
+            self.feature_means.push(means);
+            self.s2_invs.push(s2_inv);
         }
     }
 
