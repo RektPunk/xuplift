@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use faer::{Col, ColRef, Mat, MatRef};
 
+use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
 /// T-Learner (Two-Learner) for Uplift Modeling.
@@ -26,14 +29,21 @@ impl TLearner {
     /// * `x` - Feature matrix (n_samples x n_features).
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
+    /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
     /// * `mu_penalty` - Regularization penalty for the outcome models.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
+        is_categorical: &[bool],
         mu_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
+
+        // Fit KernelFeatureMap once and share it
+        let mut map = KernelFeatureMap::new();
+        map.fit(x, is_categorical);
+        let shared_map = Arc::new(map);
 
         // Create weights for T=1 and T=0
         // Use weighted fitting for stability and to avoid explicit data slicing
@@ -44,12 +54,14 @@ impl TLearner {
         let (mu_t1, mu_t0) = rayon::join(
             || {
                 let mut mu_t1 = Regressor::new(mu_penalty);
-                mu_t1.fit_weighted(x, y, &w_t1);
+                mu_t1.kernel_feature_map = Some(shared_map.clone());
+                mu_t1.fit_weighted(x, y, &w_t1, is_categorical);
                 mu_t1
             },
             || {
                 let mut mu_t0 = Regressor::new(mu_penalty);
-                mu_t0.fit_weighted(x, y, &w_t0);
+                mu_t0.kernel_feature_map = Some(shared_map.clone());
+                mu_t0.fit_weighted(x, y, &w_t0, is_categorical);
                 mu_t0
             },
         );

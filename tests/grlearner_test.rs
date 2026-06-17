@@ -39,7 +39,16 @@ fn test_grlearner() {
 
     // --- Model Initialization ---
     // GRLearner uses regressors for both outcome and treatment models to support continuous treatment.
-    let grlearner = GRLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.001, 0.001, 0.001);
+    let is_categorical = vec![false; n_features];
+    let grlearner = GRLearner::new(
+        x.as_ref(),
+        t.as_ref(),
+        y.as_ref(),
+        &is_categorical,
+        0.001,
+        0.001,
+        0.001,
+    );
 
     // --- Prediction ---
     let uplift_estimate = grlearner.predict_uplift(x.as_ref());

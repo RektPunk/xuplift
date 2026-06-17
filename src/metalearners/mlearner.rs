@@ -21,11 +21,13 @@ impl MLearner {
     /// * `x` - Feature matrix (n_samples x n_features).
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
+    /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
     /// * `tau_penalty` - Regularization penalty for the treatment effect model.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
+        is_categorical: &[bool],
         tau_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
@@ -38,7 +40,7 @@ impl MLearner {
 
         // Fit Regressor on pseudo-outcomes
         let mut tau = Regressor::new(tau_penalty);
-        tau.fit(x, y_m.as_ref());
+        tau.fit(x, y_m.as_ref(), is_categorical);
 
         Self { tau }
     }

@@ -51,9 +51,14 @@ impl Classifier {
     /// This implementation uses target centering (y - mean) to align with the Regressor's logic.
     /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column:
     /// $w_{new} = w_{old} + (Z^T R Z + \lambda I)^{-1} Z^T (y - \mu)$
-    pub fn fit(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>) {
-        let mut map = KernelFeatureMap::new();
-        map.fit(x);
+    pub fn fit(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>, is_categorical: &[bool]) {
+        if self.kernel_feature_map.is_none() {
+            let mut map = KernelFeatureMap::new();
+            map.fit(x, is_categorical);
+            self.kernel_feature_map = Some(Arc::new(map));
+        }
+
+        let map = self.kernel_feature_map.as_ref().unwrap();
 
         // Allocate space for coefficients and compute initial values
         let n_samples = x.nrows();
@@ -164,9 +169,6 @@ impl Classifier {
                 w.as_ref().subrows(start, n_bases).to_owned()
             })
             .collect();
-
-        // Store the kernel map
-        self.kernel_feature_map = Some(Arc::new(map));
     }
 
     /// Predicts class probabilities for the given input matrix X.

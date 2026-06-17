@@ -34,7 +34,17 @@ fn test_rlearner() {
 
     // --- Model Initialization ---
     // R-Learner fits: m(x) [Outcome], e(x) [Propensity], and tau(x) [Residual-on-Residual]
-    let rlearner = RLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
+    let is_categorical = vec![false; n_features];
+    let rlearner = RLearner::new(
+        x.as_ref(),
+        t.as_ref(),
+        y.as_ref(),
+        &is_categorical,
+        0.1,
+        0.1,
+        20,
+        0.1,
+    );
 
     // --- Prediction ---
     let uplift_estimate = rlearner.predict_uplift(x.as_ref());

@@ -38,7 +38,8 @@ fn test_gaussian_classification() {
 
     // --- Model Initialization ---
     let mut model = Classifier::new(0.1, 10);
-    model.fit(x.as_ref(), y.as_ref());
+    let is_categorical = vec![false; n_features];
+    model.fit(x.as_ref(), y.as_ref(), &is_categorical);
 
     // --- Verification: Accuracy ---
     let p_pred = model.predict(x.as_ref());
@@ -105,7 +106,8 @@ fn test_classifier_with_nans() {
 
     // --- Model Initialization ---
     let mut model = Classifier::new(0.1, 10);
-    model.fit(x.as_ref(), y.as_ref());
+    let is_categorical = vec![false; n_features];
+    model.fit(x.as_ref(), y.as_ref(), &is_categorical);
 
     // --- Verification ---
     // Check if predictions for NaN rows are still returning values
