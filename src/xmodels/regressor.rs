@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use faer::prelude::Solve;
 use faer::{Col, ColRef, Mat, MatRef};
+use rayon::iter::IndexedParallelIterator;
 use rayon::prelude::*;
 
 use crate::xmodels::feature_map::KernelFeatureMap;
@@ -68,6 +69,7 @@ impl Regressor {
         let n_samples = x.nrows();
         let n_features = map.num_features;
         let n_bases = map.num_bases;
+        let total_dim = n_features * n_bases;
 
         // Validate that the number of rows matches the number of target values and weights
         if n_samples != y.nrows() || n_samples != weights.nrows() {
@@ -92,53 +94,47 @@ impl Regressor {
             y.iter().sum::<f32>() / n_samples as f32
         };
 
-        let total_dim = n_features * n_bases;
+        // Transform features into the kernel space Z
+        let mut z = Mat::<f32>::zeros(n_samples, total_dim);
 
-        // Accumulate Hessian and Gradient in parallel
-        let (mut ridge_lhs, rhs, _) = (0..n_samples)
-            .into_par_iter()
-            .fold(
-                || {
-                    (
-                        Mat::<f32>::zeros(total_dim, total_dim),
-                        Col::<f32>::zeros(total_dim),
-                        Col::<f32>::zeros(total_dim),
-                    )
-                },
-                |(mut acc_h, mut acc_g, mut z_r), r_idx| {
-                    map.transform_row_into(x, r_idx, z_r.as_mut());
-                    let w = weights[r_idx];
-                    let y_c = y[r_idx] - self.base_value;
+        z.as_mut()
+            .par_col_partition_mut(n_features)
+            .enumerate()
+            .for_each(|(f_idx, mut z_f): (usize, faer::MatMut<'_, f32>)| {
+                map.transform_feature_into(x, f_idx, z_f.as_mut());
+            });
 
-                    for p_i_idx in 0..total_dim {
-                        let z_i = z_r[p_i_idx];
-                        acc_g[p_i_idx] += z_i * w * y_c;
-                        let val_i = z_i * w;
-                        for p_j_idx in 0..total_dim {
-                            acc_h[(p_i_idx, p_j_idx)] += val_i * z_r[p_j_idx];
-                        }
+        // Compute y_centered = y - base_value
+        let mut y_w = Col::<f32>::from_fn(n_samples, |i| y[i] - self.base_value);
+
+        // Apply weights: H = Z^T * W * Z  =>  H = (Z * sqrt(W))^T * (Z * sqrt(W))
+        z.as_mut()
+            .par_row_partition_mut(n_samples)
+            .enumerate()
+            .for_each(|(i, mut row): (usize, faer::MatMut<'_, f32>)| {
+                let w = weights[i];
+                if (w - 1.0).abs() > 1e-6 {
+                    let sqrt_w = w.sqrt();
+                    for j in 0..total_dim {
+                        row[(0, j)] *= sqrt_w;
                     }
-                    (acc_h, acc_g, z_r)
-                },
-            )
-            .reduce(
-                || {
-                    (
-                        Mat::<f32>::zeros(total_dim, total_dim),
-                        Col::<f32>::zeros(total_dim),
-                        Col::<f32>::zeros(0),
-                    )
-                },
-                |(mut h1, mut g1, _), (h2, g2, _)| {
-                    for p_j_idx in 0..total_dim {
-                        g1[p_j_idx] += g2[p_j_idx];
-                        for p_i_idx in 0..total_dim {
-                            h1[(p_i_idx, p_j_idx)] += h2[(p_i_idx, p_j_idx)];
-                        }
-                    }
-                    (h1, g1, Col::<f32>::zeros(0))
-                },
-            );
+                }
+            });
+
+        for i in 0..n_samples {
+            y_w[i] *= weights[i];
+        }
+
+        // Hessian: H = Z^T * W * Z
+        let mut ridge_lhs = z.transpose() * &z;
+
+        // Gradient: g = Z^T * (W * (y - b) / sqrt(W)) = Z^T * (sqrt(W) * (y - b))
+        for i in 0..n_samples {
+            let w = weights[i];
+            let factor = if w > 1e-6 { w.sqrt() } else { 0.0 };
+            y_w[i] = (y[i] - self.base_value) * factor;
+        }
+        let rhs = z.transpose() * &y_w;
 
         // Add L2 regularization (Ridge) to the diagonal
         for p_idx in 0..total_dim {
@@ -149,7 +145,6 @@ impl Regressor {
         let alpha_total = ridge_lhs.ldlt(faer::Side::Lower).unwrap().solve(&rhs);
 
         self.coefficients = (0..n_features)
-            .into_par_iter()
             .map(|f_idx| {
                 let start = f_idx * n_bases;
                 alpha_total.as_ref().subrows(start, n_bases).to_owned()
@@ -161,13 +156,11 @@ impl Regressor {
     ///
     /// The prediction is: $\hat{y} = Z \alpha + b = \sum_{j} (Z_j \alpha_j) + b$.
     pub fn predict(&self, x: MatRef<'_, f32>) -> Col<f32> {
-        let map = self
-            .kernel_feature_map
-            .as_ref()
-            .expect("Model must be fitted before prediction.");
+        let map = self.kernel_feature_map.as_ref().expect("Model not fitted");
         let n_samples = x.nrows();
         let n_features = map.num_features;
         let n_bases = map.num_bases;
+        let total_dim = n_features * n_bases;
 
         if n_features != x.ncols() {
             panic!(
@@ -177,21 +170,26 @@ impl Regressor {
             );
         }
 
-        let mut prediction = (0..n_features)
-            .into_par_iter()
-            .map(|f_idx| {
-                let mut z_f = Mat::<f32>::zeros(n_samples, n_bases);
+        // Transform features into the kernel space Z
+        let mut z = Mat::<f32>::zeros(n_samples, total_dim);
+        z.as_mut()
+            .par_col_partition_mut(n_features)
+            .enumerate()
+            .for_each(|(f_idx, mut z_f): (usize, faer::MatMut<'_, f32>)| {
                 map.transform_feature_into(x, f_idx, z_f.as_mut());
-                z_f * &self.coefficients[f_idx]
-            })
-            .reduce(
-                || Col::<f32>::zeros(n_samples),
-                |mut acc, res| {
-                    acc += res;
-                    acc
-                },
-            );
+            });
 
+        // Stack all coefficients into one big column
+        let mut all_coeffs = Col::<f32>::zeros(total_dim);
+        for f_idx in 0..n_features {
+            all_coeffs
+                .as_mut()
+                .subrows_mut(f_idx * n_bases, n_bases)
+                .copy_from(&self.coefficients[f_idx]);
+        }
+
+        // Prediction: y_hat = Z * coefficients + base_value
+        let mut prediction = z * &all_coeffs;
         for r_idx in 0..n_samples {
             prediction[r_idx] += self.base_value;
         }
@@ -204,10 +202,7 @@ impl Regressor {
     /// For each feature $i$, it calculates the contribution $C_i = Z_i \cdot \alpha_i$,
     /// such that $\sum C_i + b = \hat{y}$.
     pub fn explain(&self, x: MatRef<'_, f32>) -> Mat<f32> {
-        let map = self
-            .kernel_feature_map
-            .as_ref()
-            .expect("Model must be fitted before explanation.");
+        let map = self.kernel_feature_map.as_ref().expect("Model not fitted");
         let n_samples = x.nrows();
         let n_features = map.num_features;
         let n_bases = map.num_bases;
@@ -220,21 +215,17 @@ impl Regressor {
             );
         }
 
-        let mut contributions = vec![0.0f32; n_samples * n_features];
-
+        let mut contributions = Mat::<f32>::zeros(n_samples, n_features);
         contributions
-            .par_chunks_exact_mut(n_samples)
+            .as_mut()
+            .par_col_partition_mut(n_features)
             .enumerate()
-            .for_each(|(f_idx, col_slice)| {
-                let mut z_f = Mat::<f32>::zeros(n_samples, n_bases);
-                map.transform_feature_into(x, f_idx, z_f.as_mut());
-                let col_contrib = z_f * &self.coefficients[f_idx];
-
-                for r_idx in 0..n_samples {
-                    col_slice[r_idx] = col_contrib[r_idx];
-                }
+            .for_each(|(f_idx, z_f): (usize, faer::MatMut<'_, f32>)| {
+                let mut out_z = Mat::<f32>::zeros(n_samples, n_bases);
+                map.transform_feature_into(x, f_idx, out_z.as_mut());
+                let col_contrib = out_z * &self.coefficients[f_idx];
+                z_f.col_mut(0).copy_from(&col_contrib);
             });
-
-        MatRef::from_column_major_slice(&contributions, n_samples, n_features).to_owned()
+        contributions
     }
 }

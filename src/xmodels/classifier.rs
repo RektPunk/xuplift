@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use faer::prelude::Solve;
 use faer::{Col, ColRef, Mat, MatRef};
+use rayon::iter::IndexedParallelIterator;
 use rayon::prelude::*;
 
 use crate::xmodels::feature_map::KernelFeatureMap;
@@ -67,6 +68,7 @@ impl Classifier {
         let n_samples = x.nrows();
         let n_features = map.num_features;
         let n_bases = map.num_bases;
+        let total_dim = n_features * n_bases;
 
         // Validate that the number of rows matches the number of target values and weights
         if n_samples != y.nrows() {
@@ -83,65 +85,53 @@ impl Classifier {
         let p_clamped = mean_y.clamp(eps, 1.0 - eps);
         self.base_value = (p_clamped / (1.0 - p_clamped)).ln();
 
+        // Pre-compute Z matrix once
+        let mut z = Mat::<f32>::zeros(n_samples, total_dim);
+        z.as_mut()
+            .par_col_partition_mut(n_features)
+            .enumerate()
+            .for_each(|(f_idx, mut z_f): (usize, faer::MatMut<'_, f32>)| {
+                map.transform_feature_into(x, f_idx, z_f.as_mut());
+            });
+
         // Initialize coefficients
-        let total_dim = n_features * n_bases;
         let mut w = Col::<f32>::zeros(total_dim);
 
-        // IRLS Iteration: streaming accumulation to minimize memory peak
+        // IRLS Iteration
         for _ in 0..self.max_iter {
             let base_val = self.base_value;
-            let (mut hessian, rhs, _) = (0..n_samples)
-                .into_par_iter()
-                .fold(
-                    || {
-                        (
-                            Mat::<f32>::zeros(total_dim, total_dim),
-                            Col::<f32>::zeros(total_dim),
-                            Col::<f32>::zeros(total_dim),
-                        )
-                    },
-                    |(mut acc_h, mut acc_g, mut z_r), r_idx| {
-                        map.transform_row_into(x, r_idx, z_r.as_mut());
 
-                        // Linear prediction: raw_pred = z^T * w + base_value
-                        let mut raw_pred = base_val;
-                        for p_idx in 0..total_dim {
-                            raw_pred += z_r[p_idx] * w[p_idx];
-                        }
+            // Prediction in logit space: raw_pred = Z * w + base_value
+            let mut raw_pred = &z * &w;
+            for i in 0..n_samples {
+                raw_pred[i] += base_val;
+            }
 
-                        let prob = Self::sigmoid(raw_pred);
-                        let r_val = (prob * (1.0 - prob)).max(1e-5);
-                        let err = y[r_idx] - prob;
+            // Compute probabilities, working weights, and errors
+            let mut r_val = Col::<f32>::zeros(n_samples);
+            let mut err = Col::<f32>::zeros(n_samples);
+            for i in 0..n_samples {
+                let prob = Self::sigmoid(raw_pred[i]);
+                r_val[i] = (prob * (1.0 - prob)).max(1e-5);
+                err[i] = y[i] - prob;
+            }
 
-                        for p_i_idx in 0..total_dim {
-                            let z_k = z_r[p_i_idx];
-                            acc_g[p_i_idx] += z_k * err;
-                            let val_k = z_k * r_val;
-                            for p_j_idx in 0..total_dim {
-                                acc_h[(p_i_idx, p_j_idx)] += val_k * z_r[p_j_idx];
-                            }
-                        }
-                        (acc_h, acc_g, z_r)
-                    },
-                )
-                .reduce(
-                    || {
-                        (
-                            Mat::<f32>::zeros(total_dim, total_dim),
-                            Col::<f32>::zeros(total_dim),
-                            Col::<f32>::zeros(0),
-                        )
-                    },
-                    |(mut h1, mut g1, _), (h2, g2, _)| {
-                        for p_j_idx in 0..total_dim {
-                            g1[p_j_idx] += g2[p_j_idx];
-                            for p_i_idx in 0..total_dim {
-                                h1[(p_i_idx, p_j_idx)] += h2[(p_i_idx, p_j_idx)];
-                            }
-                        }
-                        (h1, g1, Col::<f32>::zeros(0))
-                    },
-                );
+            // Hessian: H = Z^T * Diag(R) * Z
+            let mut z_w = z.clone();
+            z_w.as_mut()
+                .par_row_partition_mut(n_samples)
+                .enumerate()
+                .for_each(|(i, mut row): (usize, faer::MatMut<'_, f32>)| {
+                    let r = r_val[i];
+                    for j in 0..total_dim {
+                        row[(0, j)] *= r;
+                    }
+                });
+
+            let mut hessian = z.transpose() * &z_w;
+
+            // Gradient: g = Z^T * (y - prob)
+            let rhs = z.transpose() * &err;
 
             // Add L2 regularization (Ridge)
             for p_idx in 0..total_dim {
@@ -152,7 +142,6 @@ impl Classifier {
             let delta_w = if let Ok(ldlt) = hessian.ldlt(faer::Side::Lower) {
                 ldlt.solve(&rhs)
             } else {
-                // If Hessian is singular, stop iterations early
                 break;
             };
 
@@ -166,7 +155,6 @@ impl Classifier {
 
         // De-stack the weight vector into per-feature coefficients
         self.coefficients = (0..n_features)
-            .into_par_iter()
             .map(|f_idx| {
                 let start = f_idx * n_bases;
                 w.as_ref().subrows(start, n_bases).to_owned()
@@ -178,13 +166,11 @@ impl Classifier {
     ///
     /// Returns a vector of probabilities for the positive class (1).
     pub fn predict(&self, x: MatRef<'_, f32>) -> Col<f32> {
-        let map = self
-            .kernel_feature_map
-            .as_ref()
-            .expect("Model must be fitted before prediction.");
+        let map = self.kernel_feature_map.as_ref().expect("Model not fitted");
         let n_samples = x.nrows();
         let n_features = map.num_features;
         let n_bases = map.num_bases;
+        let total_dim = n_features * n_bases;
 
         if n_features != x.ncols() {
             panic!(
@@ -194,21 +180,26 @@ impl Classifier {
             );
         }
 
-        let mut prediction = (0..n_features)
-            .into_par_iter()
-            .map(|f_idx| {
-                let mut z_f = Mat::<f32>::zeros(n_samples, n_bases);
+        // Transform features into the kernel space Z
+        let mut z = Mat::<f32>::zeros(n_samples, total_dim);
+        z.as_mut()
+            .par_col_partition_mut(n_features)
+            .enumerate()
+            .for_each(|(f_idx, mut z_f): (usize, faer::MatMut<'_, f32>)| {
                 map.transform_feature_into(x, f_idx, z_f.as_mut());
-                z_f * &self.coefficients[f_idx]
-            })
-            .reduce(
-                || Col::<f32>::zeros(n_samples),
-                |mut acc, res| {
-                    acc += res;
-                    acc
-                },
-            );
+            });
 
+        // Stack all coefficients into one big column
+        let mut all_coeffs = Col::<f32>::zeros(total_dim);
+        for f_idx in 0..n_features {
+            all_coeffs
+                .as_mut()
+                .subrows_mut(f_idx * n_bases, n_bases)
+                .copy_from(&self.coefficients[f_idx]);
+        }
+
+        // Prediction: prob = sigmoid(Z * coefficients + base_value)
+        let mut prediction = z * &all_coeffs;
         for r_idx in 0..n_samples {
             prediction[r_idx] = Self::sigmoid(prediction[r_idx] + self.base_value);
         }
@@ -221,10 +212,7 @@ impl Classifier {
     /// For each feature $i$, it calculates the contribution $C_i = Z_i \cdot \alpha_i$,
     /// resulting in a matrix where each column represents the contribution of a specific feature.
     pub fn explain(&self, x: MatRef<'_, f32>) -> Mat<f32> {
-        let map = self
-            .kernel_feature_map
-            .as_ref()
-            .expect("Model must be fitted before explanation.");
+        let map = self.kernel_feature_map.as_ref().expect("Model not fitted");
         let n_samples = x.nrows();
         let n_features = map.num_features;
         let n_bases = map.num_bases;
@@ -237,21 +225,17 @@ impl Classifier {
             );
         }
 
-        let mut contributions = vec![0.0f32; n_samples * n_features];
-
+        let mut contributions = Mat::<f32>::zeros(n_samples, n_features);
         contributions
-            .par_chunks_exact_mut(n_samples)
+            .as_mut()
+            .par_col_partition_mut(n_features)
             .enumerate()
-            .for_each(|(f_idx, col_slice)| {
-                let mut z_f = Mat::<f32>::zeros(n_samples, n_bases);
-                map.transform_feature_into(x, f_idx, z_f.as_mut());
-                let col_contrib = z_f * &self.coefficients[f_idx];
-
-                for r_idx in 0..n_samples {
-                    col_slice[r_idx] = col_contrib[r_idx];
-                }
+            .for_each(|(f_idx, z_f): (usize, faer::MatMut<'_, f32>)| {
+                let mut out_z = Mat::<f32>::zeros(n_samples, n_bases);
+                map.transform_feature_into(x, f_idx, out_z.as_mut());
+                let col_contrib = out_z * &self.coefficients[f_idx];
+                z_f.col_mut(0).copy_from(&col_contrib);
             });
-
-        MatRef::from_column_major_slice(&contributions, n_samples, n_features).to_owned()
+        contributions
     }
 }
