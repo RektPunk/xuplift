@@ -22,6 +22,8 @@ pub struct KernelFeatureMap {
     /// Selected landmark samples from the training set.
     /// Each entry in the vector contains the landmark values per feature.
     pub feature_bases: Vec<Col<f32>>,
+    /// Indicates whether each feature is categorical or continuous.
+    pub is_categorical: Vec<bool>,
 
     /// Learned projection matrices to map data into the kernel space
     /// $P = U \Lambda^{-1/2}$, where $U$ and $\Lambda$ are the eigenvectors and eigenvalues of $K_{mm}$
@@ -44,9 +46,10 @@ impl KernelFeatureMap {
     }
 
     /// Fits the transformer to the input matrix X.
-    pub fn fit(&mut self, x: MatRef<'_, f32>) {
+    pub fn fit(&mut self, x: MatRef<'_, f32>, is_categorical: &Vec<bool>) {
         let n_samples = x.nrows();
         self.num_features = x.ncols();
+        self.is_categorical = is_categorical.clone();
 
         // Calculate feature means (skipping NaNs) to use for imputation during landmark selection
         let raw_feature_means: Vec<f32> = (0..self.num_features)
@@ -92,6 +95,7 @@ impl KernelFeatureMap {
             .into_par_iter()
             .map(|f_idx| {
                 let f_mean = raw_feature_means[f_idx];
+                let is_categorical_f = is_categorical[f_idx];
 
                 // Median Heuristic: sets sigma to the median of pairwise distances between landmarks
                 let mut dists_buf = [0.0f32; Self::MAX_DIST_PAIRS];
@@ -138,12 +142,15 @@ impl KernelFeatureMap {
                 for b_i_idx in 0..self.num_bases {
                     for b_j_idx in b_i_idx..self.num_bases {
                         let diff = bases[b_i_idx] - bases[b_j_idx];
-                        let val = (-(diff * diff) * s2_inv).exp();
-                        k_mm[(b_i_idx, b_j_idx)] = val;
+                        if is_categorical_f {
+                            k_mm[(b_i_idx, b_j_idx)] = if diff < 1e-5 { 1.0 } else { 0.0 };
+                        } else {
+                            k_mm[(b_i_idx, b_j_idx)] = (-(diff * diff) * s2_inv).exp();
+                        }
 
                         // Symmetric: k_ij = k_ji
                         if b_i_idx != b_j_idx {
-                            k_mm[(b_j_idx, b_i_idx)] = val;
+                            k_mm[(b_j_idx, b_i_idx)] = k_mm[(b_i_idx, b_j_idx)];
                         }
                     }
                 }
@@ -171,7 +178,11 @@ impl KernelFeatureMap {
                     if !x_val.is_nan() {
                         for b_idx in 0..self.num_bases {
                             let diff = x_val - bases[b_idx];
-                            k_col_sums[b_idx] += (-(diff * diff) * s2_inv).exp();
+                            if is_categorical_f {
+                                k_col_sums[b_idx] += if diff < 1e-5 { 1.0 } else { 0.0 };
+                            } else {
+                                k_col_sums[b_idx] += (-(diff * diff) * s2_inv).exp();
+                            }
                         }
                     }
                 }
@@ -207,6 +218,8 @@ impl KernelFeatureMap {
         let mut kernel_cache = [0.0f32; Self::MAX_BASES];
         for f_idx in 0..self.num_features {
             let x_val = x[(r_idx, f_idx)];
+            let is_categorical_f = self.is_categorical[f_idx];
+
             let offset = f_idx * self.num_bases;
 
             // Handle missing values
@@ -225,7 +238,11 @@ impl KernelFeatureMap {
             // Pre-calculate RBF kernel distances between input and landmarks
             for b_idx in 0..self.num_bases {
                 let diff = x_val - bases[b_idx];
-                kernel_cache[b_idx] = (-(diff * diff) * s2_inv).exp();
+                if is_categorical_f {
+                    kernel_cache[b_idx] = if diff < 1e-5 { 1.0 } else { 0.0 };
+                } else {
+                    kernel_cache[b_idx] = (-(diff * diff) * s2_inv).exp();
+                }
             }
 
             // Map into the learned Nystrom feature space via linear projection and centering
@@ -257,6 +274,7 @@ impl KernelFeatureMap {
         let proj = &self.proj_matrices[f_idx];
         let mean = &self.feature_means[f_idx];
         let s2_inv = self.s2_invs[f_idx];
+        let is_categorical_f = self.is_categorical[f_idx];
 
         for r_idx in 0..n_samples {
             let x_val = x[(r_idx, f_idx)];
@@ -276,7 +294,11 @@ impl KernelFeatureMap {
             // Pre-calculate RBF kernel distances between input and landmarks
             for b_idx in 0..self.num_bases {
                 let diff = x_val - bases[b_idx];
-                kernel_cache[b_idx] = (-(diff * diff) * s2_inv).exp();
+                if is_categorical_f {
+                    kernel_cache[b_idx] = if diff < 1e-5 { 1.0 } else { 0.0 };
+                } else {
+                    kernel_cache[b_idx] = (-(diff * diff) * s2_inv).exp();
+                }
             }
 
             // Map into the learned Nystrom feature space via linear projection and centering
