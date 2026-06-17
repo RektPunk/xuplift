@@ -28,7 +28,8 @@ fn test_regression() {
 
     // --- Model Initialization ---
     let mut model = Regressor::new(penalty);
-    model.fit(x.as_ref(), y.as_ref());
+    let is_categorical = vec![false; n_features];
+    model.fit(x.as_ref(), y.as_ref(), &is_categorical);
 
     // --- Verification: Accuracy ---
     let y_pred = model.predict(x.as_ref());
@@ -96,7 +97,8 @@ fn test_regression_with_nans() {
 
     // --- Model Initialization ---
     let mut model = Regressor::new(0.01);
-    model.fit(x.as_ref(), y.as_ref());
+    let is_categorical = vec![false; n_features];
+    model.fit(x.as_ref(), y.as_ref(), &is_categorical);
 
     // --- Verification ---
     // Check if predictions for NaN rows are still returning values
