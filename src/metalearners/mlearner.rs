@@ -22,12 +22,14 @@ impl MLearner {
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
     /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
+    /// * `max_bases` - Maximum number of bases for the kernel feature map.
     /// * `tau_penalty` - Regularization penalty for the treatment effect model.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
         is_categorical: &[bool],
+        max_bases: usize,
         tau_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
@@ -39,7 +41,7 @@ impl MLearner {
         });
 
         // Fit Regressor on pseudo-outcomes
-        let mut tau = Regressor::new(tau_penalty);
+        let mut tau = Regressor::new(max_bases, tau_penalty);
         tau.fit(x, y_m.as_ref(), is_categorical);
 
         Self { tau }

@@ -24,12 +24,14 @@ impl SLearner {
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
     /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
+    /// * `max_bases` - Maximum number of bases for the kernel feature map.
     /// * `mu_penalty` - Regularization penalty for the outcome model.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
         is_categorical: &[bool],
+        max_bases: usize,
         mu_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
@@ -48,7 +50,7 @@ impl SLearner {
         x_combined.as_mut().col_mut(num_cols).copy_from(t);
 
         // Fit Regressor on combined features (X, T)
-        let mut mu = Regressor::new(mu_penalty);
+        let mut mu = Regressor::new(max_bases, mu_penalty);
         mu.fit(x_combined.as_ref(), y, &is_categorical_combined);
 
         Self { mu }
