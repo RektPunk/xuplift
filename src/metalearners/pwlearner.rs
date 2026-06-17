@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use faer::{Col, ColRef, Mat, MatRef};
 
 use crate::xmodels::classifier::Classifier;
+use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
 /// Propensity Score Weighted Learner (PW-Learner) for Uplift Modeling.
@@ -37,8 +40,14 @@ impl PWLearner {
     ) -> Self {
         let num_rows = x.nrows();
 
+        // Fit KernelFeatureMap once and share it
+        let mut map = KernelFeatureMap::new();
+        map.fit(x, is_categorical);
+        let shared_map = Arc::new(map);
+
         // Fit and predict propensity score model
         let mut p = Classifier::new(p_penalty, p_max_iter);
+        p.kernel_feature_map = Some(shared_map.clone());
         p.fit(x, t, is_categorical);
         let p_pred = p.predict(x);
 
@@ -56,6 +65,7 @@ impl PWLearner {
 
         // Fit model on pseudo-outcomes
         let mut tau = Regressor::new(tau_penalty);
+        tau.kernel_feature_map = Some(shared_map.clone());
         tau.fit(x, y_pw.as_ref(), is_categorical);
 
         Self { tau }

@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use faer::{Col, ColRef, Mat, MatRef};
 
+use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
 /// T-Learner (Two-Learner) for Uplift Modeling.
@@ -37,6 +40,11 @@ impl TLearner {
     ) -> Self {
         let num_rows = x.nrows();
 
+        // Fit KernelFeatureMap once and share it
+        let mut map = KernelFeatureMap::new();
+        map.fit(x, is_categorical);
+        let shared_map = Arc::new(map);
+
         // Create weights for T=1 and T=0
         // Use weighted fitting for stability and to avoid explicit data slicing
         let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
@@ -46,11 +54,13 @@ impl TLearner {
         let (mu_t1, mu_t0) = rayon::join(
             || {
                 let mut mu_t1 = Regressor::new(mu_penalty);
+                mu_t1.kernel_feature_map = Some(shared_map.clone());
                 mu_t1.fit_weighted(x, y, &w_t1, is_categorical);
                 mu_t1
             },
             || {
                 let mut mu_t0 = Regressor::new(mu_penalty);
+                mu_t0.kernel_feature_map = Some(shared_map.clone());
                 mu_t0.fit_weighted(x, y, &w_t0, is_categorical);
                 mu_t0
             },

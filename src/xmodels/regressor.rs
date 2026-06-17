@@ -53,8 +53,13 @@ impl Regressor {
         weights: &Col<f32>,
         is_categorical: &Vec<bool>,
     ) {
-        let mut map = KernelFeatureMap::new();
-        map.fit(x, &is_categorical);
+        if self.kernel_feature_map.is_none() {
+            let mut map = KernelFeatureMap::new();
+            map.fit(x, is_categorical);
+            self.kernel_feature_map = Some(Arc::new(map));
+        }
+
+        let map = self.kernel_feature_map.as_ref().unwrap();
 
         // Allocate space for coefficients and compute initial values
         let n_samples = x.nrows();
@@ -147,9 +152,6 @@ impl Regressor {
                 alpha_total.as_ref().subrows(start, n_bases).to_owned()
             })
             .collect();
-
-        // Store the kernel map
-        self.kernel_feature_map = Some(Arc::new(map));
     }
 
     /// Predicts target values for the given feature matrix X.

@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use faer::{Col, ColRef, Mat, MatRef};
 
+use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
 /// Generalized R-Learner (GR-Learner) for Uplift Modeling.
@@ -38,15 +41,22 @@ impl GRLearner {
     ) -> Self {
         let num_rows = x.nrows();
 
+        // Fit KernelFeatureMap once and share it
+        let mut map = KernelFeatureMap::new();
+        map.fit(x, is_categorical);
+        let shared_map = Arc::new(map);
+
         // Fit and predict outcome model mu(x) and treatment model p(x) concurrently
         let (mu_pred, p_pred) = rayon::join(
             || {
                 let mut mu = Regressor::new(mu_penalty);
+                mu.kernel_feature_map = Some(shared_map.clone());
                 mu.fit(x, y, is_categorical);
                 mu.predict(x)
             },
             || {
                 let mut p = Regressor::new(p_penalty);
+                p.kernel_feature_map = Some(shared_map.clone());
                 p.fit(x, t, is_categorical);
                 p.predict(x)
             },
@@ -72,6 +82,7 @@ impl GRLearner {
 
         // Fit model on weighted targets
         let mut tau = Regressor::new(tau_penalty);
+        tau.kernel_feature_map = Some(shared_map.clone());
         tau.fit_weighted(x, r_target_col.as_ref(), &r_weights_col, is_categorical);
 
         Self { tau }

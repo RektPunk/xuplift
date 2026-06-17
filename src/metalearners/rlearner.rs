@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use faer::{Col, ColRef, Mat, MatRef};
 
 use crate::xmodels::classifier::Classifier;
+use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
 /// R-Learner (Residual Learner) for Uplift Modeling.
@@ -41,15 +44,22 @@ impl RLearner {
     ) -> Self {
         let num_rows = x.nrows();
 
+        // Fit KernelFeatureMap once and share it
+        let mut map = KernelFeatureMap::new();
+        map.fit(x, is_categorical);
+        let shared_map = Arc::new(map);
+
         // Fit and predict outcome model mu(x) and propensity model p(x) concurrently
         let (mu_pred, p_pred) = rayon::join(
             || {
                 let mut mu = Regressor::new(mu_penalty);
+                mu.kernel_feature_map = Some(shared_map.clone());
                 mu.fit(x, y, is_categorical);
                 mu.predict(x)
             },
             || {
                 let mut p = Classifier::new(p_penalty, p_max_iter);
+                p.kernel_feature_map = Some(shared_map.clone());
                 p.fit(x, t, is_categorical);
                 p.predict(x)
             },
@@ -77,6 +87,7 @@ impl RLearner {
 
         // Fit model on weighted targets
         let mut tau = Regressor::new(tau_penalty);
+        tau.kernel_feature_map = Some(shared_map.clone());
         tau.fit_weighted(x, r_target_col.as_ref(), &r_weights_col, is_categorical);
 
         Self { tau }
