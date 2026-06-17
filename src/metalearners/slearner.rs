@@ -23,16 +23,20 @@ impl SLearner {
     /// * `x` - Feature matrix (n_samples x n_features).
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
+    /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
     /// * `mu_penalty` - Regularization penalty for the outcome model.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
+        is_categorical: &Vec<bool>,
         mu_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
         let mut x_combined = Mat::<f32>::zeros(num_rows, num_cols + 1);
+        let mut is_categorical_combined = is_categorical.clone();
+        is_categorical_combined.push(true);
 
         // Copy features X into the combined matrix
         x_combined
@@ -45,7 +49,7 @@ impl SLearner {
 
         // Fit Regressor on combined features (X, T)
         let mut mu = Regressor::new(mu_penalty);
-        mu.fit(x_combined.as_ref(), y);
+        mu.fit(x_combined.as_ref(), y, &is_categorical_combined);
 
         Self { mu }
     }

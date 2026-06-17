@@ -22,6 +22,7 @@ impl PWLearner {
     /// * `x` - Feature matrix (n_samples x n_features).
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
+    /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
     /// * `p_penalty` - Regularization penalty for the propensity model.
     /// * `p_max_iter` - Maximum iterations for the propensity model solver.
     /// * `tau_penalty` - Regularization penalty for the treatment effect model.
@@ -29,6 +30,7 @@ impl PWLearner {
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
+        is_categorical: &Vec<bool>,
         p_penalty: f32,
         p_max_iter: usize,
         tau_penalty: f32,
@@ -37,7 +39,7 @@ impl PWLearner {
 
         // Fit and predict propensity score model
         let mut p = Classifier::new(p_penalty, p_max_iter);
-        p.fit(x, t);
+        p.fit(x, t, is_categorical);
         let p_pred = p.predict(x);
 
         // Construct pseudo-outcomes in parallel
@@ -54,7 +56,7 @@ impl PWLearner {
 
         // Fit model on pseudo-outcomes
         let mut tau = Regressor::new(tau_penalty);
-        tau.fit(x, y_pw.as_ref());
+        tau.fit(x, y_pw.as_ref(), is_categorical);
 
         Self { tau }
     }

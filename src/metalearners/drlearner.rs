@@ -26,6 +26,7 @@ impl DRLearner {
     /// * `x` - Feature matrix (n_samples x n_features).
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
+    /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
     /// * `mu_penalty` - Regularization penalty for the outcome models.
     /// * `p_penalty` - Regularization penalty for the propensity model.
     /// * `p_max_iter` - Maximum iterations for the propensity model solver.
@@ -34,6 +35,7 @@ impl DRLearner {
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
+        is_categorical: &Vec<bool>,
         mu_penalty: f32,
         p_penalty: f32,
         p_max_iter: usize,
@@ -51,19 +53,19 @@ impl DRLearner {
                 rayon::join(
                     || {
                         let mut mu_t1 = Regressor::new(mu_penalty);
-                        mu_t1.fit_weighted(x, y, &w_t1);
+                        mu_t1.fit_weighted(x, y, &w_t1, is_categorical);
                         mu_t1.predict(x)
                     },
                     || {
                         let mut mu_t0 = Regressor::new(mu_penalty);
-                        mu_t0.fit_weighted(x, y, &w_t0);
+                        mu_t0.fit_weighted(x, y, &w_t0, is_categorical);
                         mu_t0.predict(x)
                     },
                 )
             },
             || {
                 let mut p = Classifier::new(p_penalty, p_max_iter);
-                p.fit(x, t);
+                p.fit(x, t, is_categorical);
                 p.predict(x)
             },
         );
@@ -84,7 +86,7 @@ impl DRLearner {
 
         // Fit model on pseudo-outcomes
         let mut tau = Regressor::new(tau_penalty);
-        tau.fit(x, y_dr.as_ref());
+        tau.fit(x, y_dr.as_ref(), is_categorical);
 
         Self { tau }
     }

@@ -26,11 +26,13 @@ impl TLearner {
     /// * `x` - Feature matrix (n_samples x n_features).
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
+    /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
     /// * `mu_penalty` - Regularization penalty for the outcome models.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
+        is_categorical: &Vec<bool>,
         mu_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
@@ -44,12 +46,12 @@ impl TLearner {
         let (mu_t1, mu_t0) = rayon::join(
             || {
                 let mut mu_t1 = Regressor::new(mu_penalty);
-                mu_t1.fit_weighted(x, y, &w_t1);
+                mu_t1.fit_weighted(x, y, &w_t1, is_categorical);
                 mu_t1
             },
             || {
                 let mut mu_t0 = Regressor::new(mu_penalty);
-                mu_t0.fit_weighted(x, y, &w_t0);
+                mu_t0.fit_weighted(x, y, &w_t0, is_categorical);
                 mu_t0
             },
         );

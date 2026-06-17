@@ -32,7 +32,16 @@ fn test_pwlearner() {
 
     // --- Model Initialization ---
     // PWLearner fits a propensity classifier and fits a tau model on the pseudo-outcomes.
-    let pwlearner = PWLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.5, 10, 0.5);
+    let is_categorical = vec![false; n_features];
+    let pwlearner = PWLearner::new(
+        x.as_ref(),
+        t.as_ref(),
+        y.as_ref(),
+        &is_categorical,
+        0.5,
+        10,
+        0.5,
+    );
 
     // --- Prediction ---
     let uplift_estimate = pwlearner.predict_uplift(x.as_ref());

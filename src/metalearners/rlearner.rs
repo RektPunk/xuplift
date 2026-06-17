@@ -24,6 +24,7 @@ impl RLearner {
     /// * `x` - Feature matrix (n_samples x n_features).
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
+    /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
     /// * `mu_penalty` - Regularization penalty for the outcome model.
     /// * `p_penalty` - Regularization penalty for the propensity model.
     /// * `p_max_iter` - Maximum iterations for the propensity model solver.
@@ -32,6 +33,7 @@ impl RLearner {
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
+        is_categorical: &Vec<bool>,
         mu_penalty: f32,
         p_penalty: f32,
         p_max_iter: usize,
@@ -43,12 +45,12 @@ impl RLearner {
         let (mu_pred, p_pred) = rayon::join(
             || {
                 let mut mu = Regressor::new(mu_penalty);
-                mu.fit(x, y);
+                mu.fit(x, y, is_categorical);
                 mu.predict(x)
             },
             || {
                 let mut p = Classifier::new(p_penalty, p_max_iter);
-                p.fit(x, t);
+                p.fit(x, t, is_categorical);
                 p.predict(x)
             },
         );
@@ -75,7 +77,7 @@ impl RLearner {
 
         // Fit model on weighted targets
         let mut tau = Regressor::new(tau_penalty);
-        tau.fit_weighted(x, r_target_col.as_ref(), &r_weights_col);
+        tau.fit_weighted(x, r_target_col.as_ref(), &r_weights_col, is_categorical);
 
         Self { tau }
     }
