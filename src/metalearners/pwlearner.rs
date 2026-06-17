@@ -33,7 +33,7 @@ impl PWLearner {
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
-        is_categorical: &Vec<bool>,
+        is_categorical: &[bool],
         p_penalty: f32,
         p_max_iter: usize,
         tau_penalty: f32,

@@ -34,7 +34,7 @@ impl GRLearner {
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
-        is_categorical: &Vec<bool>,
+        is_categorical: &[bool],
         mu_penalty: f32,
         p_penalty: f32,
         tau_penalty: f32,

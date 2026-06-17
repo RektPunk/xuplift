@@ -46,10 +46,10 @@ impl KernelFeatureMap {
     }
 
     /// Fits the transformer to the input matrix X.
-    pub fn fit(&mut self, x: MatRef<'_, f32>, is_categorical: &Vec<bool>) {
+    pub fn fit(&mut self, x: MatRef<'_, f32>, is_categorical: &[bool]) {
         let n_samples = x.nrows();
         self.num_features = x.ncols();
-        self.is_categorical = is_categorical.clone();
+        self.is_categorical = is_categorical.to_owned();
 
         // Calculate feature means (skipping NaNs) to use for imputation during landmark selection
         let raw_feature_means: Vec<f32> = (0..self.num_features)

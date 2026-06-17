@@ -37,7 +37,7 @@ impl Regressor {
     /// Fits the model using Global Ridge Regression.
     ///
     /// This method solves the system: $(Z^T Z + \lambda I) \alpha = Z^T (y - b)$
-    pub fn fit(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>, is_categorical: &Vec<bool>) {
+    pub fn fit(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>, is_categorical: &[bool]) {
         let weights = Col::<f32>::full(x.nrows(), 1.0);
         self.fit_weighted(x, y, &weights, is_categorical);
     }
@@ -51,7 +51,7 @@ impl Regressor {
         x: MatRef<'_, f32>,
         y: ColRef<'_, f32>,
         weights: &Col<f32>,
-        is_categorical: &Vec<bool>,
+        is_categorical: &[bool],
     ) {
         if self.kernel_feature_map.is_none() {
             let mut map = KernelFeatureMap::new();

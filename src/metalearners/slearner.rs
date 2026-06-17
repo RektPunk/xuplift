@@ -29,13 +29,13 @@ impl SLearner {
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
-        is_categorical: &Vec<bool>,
+        is_categorical: &[bool],
         mu_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
         let num_cols = x.ncols();
         let mut x_combined = Mat::<f32>::zeros(num_rows, num_cols + 1);
-        let mut is_categorical_combined = is_categorical.clone();
+        let mut is_categorical_combined = is_categorical.to_owned();
         is_categorical_combined.push(true);
 
         // Copy features X into the combined matrix
