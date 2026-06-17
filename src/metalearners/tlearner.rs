@@ -30,18 +30,20 @@ impl TLearner {
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
     /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
+    /// * `max_bases` - Maximum number of landmark points for the kernel feature map.
     /// * `mu_penalty` - Regularization penalty for the outcome models.
     pub fn new(
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
         is_categorical: &[bool],
+        max_bases: usize,
         mu_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
 
         // Fit KernelFeatureMap once and share it
-        let mut map = KernelFeatureMap::new();
+        let mut map = KernelFeatureMap::new(max_bases);
         map.fit(x, is_categorical);
         let shared_map = Arc::new(map);
 
@@ -53,13 +55,13 @@ impl TLearner {
         // Fit models concurrently using weighted fitting
         let (mu_t1, mu_t0) = rayon::join(
             || {
-                let mut mu_t1 = Regressor::new(mu_penalty);
+                let mut mu_t1 = Regressor::new(max_bases, mu_penalty);
                 mu_t1.kernel_feature_map = Some(shared_map.clone());
                 mu_t1.fit_weighted(x, y, &w_t1, is_categorical);
                 mu_t1
             },
             || {
-                let mut mu_t0 = Regressor::new(mu_penalty);
+                let mut mu_t0 = Regressor::new(max_bases, mu_penalty);
                 mu_t0.kernel_feature_map = Some(shared_map.clone());
                 mu_t0.fit_weighted(x, y, &w_t0, is_categorical);
                 mu_t0

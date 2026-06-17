@@ -27,7 +27,7 @@ fn test_regression() {
     }
 
     // --- Model Initialization ---
-    let mut model = Regressor::new(penalty);
+    let mut model = Regressor::new(64, penalty);
     let is_categorical = vec![false; n_features];
     model.fit(x.as_ref(), y.as_ref(), &is_categorical);
 
@@ -96,7 +96,7 @@ fn test_regression_with_nans() {
     }
 
     // --- Model Initialization ---
-    let mut model = Regressor::new(0.01);
+    let mut model = Regressor::new(64, 0.01);
     let is_categorical = vec![false; n_features];
     model.fit(x.as_ref(), y.as_ref(), &is_categorical);
 

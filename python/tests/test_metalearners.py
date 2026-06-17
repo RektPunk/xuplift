@@ -33,6 +33,7 @@ def test_drlearner(uplift_data):
         t,
         y,
         [False, False, False],
+        max_bases=64,
         mu_penalty=0.1,
         p_penalty=0.1,
         p_max_iter=10,
@@ -49,7 +50,14 @@ def test_drlearner(uplift_data):
 def test_grlearner(uplift_data):
     x, t, y = uplift_data
     model = GRLearner(
-        x, t, y, [False, False, False], mu_penalty=0.1, p_penalty=0.1, tau_penalty=0.1
+        x,
+        t,
+        y,
+        [False, False, False],
+        max_bases=64,
+        mu_penalty=0.1,
+        p_penalty=0.1,
+        tau_penalty=0.1,
     )
 
     ite = model.predict_uplift(x)
@@ -61,7 +69,7 @@ def test_grlearner(uplift_data):
 
 def test_mlearner(uplift_data):
     x, t, y = uplift_data
-    model = MLearner(x, t, y, [False, False, False], tau_penalty=0.1)
+    model = MLearner(x, t, y, [False, False, False], max_bases=64, tau_penalty=0.1)
 
     ite = model.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
@@ -73,7 +81,14 @@ def test_mlearner(uplift_data):
 def test_pwlearner(uplift_data):
     x, t, y = uplift_data
     model = PWLearner(
-        x, t, y, [False, False, False], p_penalty=0.1, p_max_iter=10, tau_penalty=0.1
+        x,
+        t,
+        y,
+        [False, False, False],
+        max_bases=64,
+        p_penalty=0.1,
+        p_max_iter=10,
+        tau_penalty=0.1,
     )
 
     ite = model.predict_uplift(x)
@@ -90,6 +105,7 @@ def test_rlearner(uplift_data):
         t,
         y,
         [False, False, False],
+        max_bases=64,
         mu_penalty=0.1,
         p_penalty=0.1,
         p_max_iter=10,
@@ -105,7 +121,7 @@ def test_rlearner(uplift_data):
 
 def test_slearner(uplift_data):
     x, t, y = uplift_data
-    model = SLearner(x, t, y, [False, False, False], mu_penalty=0.1)
+    model = SLearner(x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1)
 
     ite = model.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
@@ -117,7 +133,7 @@ def test_slearner(uplift_data):
 
 def test_tlearner(uplift_data):
     x, t, y = uplift_data
-    model = TLearner(x, t, y, [False, False, False], mu_penalty=0.1)
+    model = TLearner(x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1)
 
     ite = model.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
@@ -133,6 +149,7 @@ def test_xlearner(uplift_data):
         t,
         y,
         [False, False, False],
+        max_bases=64,
         mu_penalty=0.1,
         p_penalty=0.1,
         p_max_iter=10,

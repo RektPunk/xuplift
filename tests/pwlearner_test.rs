@@ -38,6 +38,7 @@ fn test_pwlearner() {
         t.as_ref(),
         y.as_ref(),
         &is_categorical,
+        64,
         0.5,
         10,
         0.5,

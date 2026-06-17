@@ -9,7 +9,7 @@ def test_classifier_fit_predict():
     x = np.random.randn(n_samples, n_features).astype(np.float32)
     y = (x[:, 0] + x[:, 1] > 0).astype(np.float32)  # Class 1 if x[0] + x[1] > 0
 
-    model = Classifier(penalty=0.1, max_iter=20)
+    model = Classifier(max_bases=64, penalty=0.1, max_iter=20)
     model.fit(x, y, [False, False])
 
     probs = model.predict(x)
@@ -26,7 +26,7 @@ def test_classifier_explain():
     x = np.random.randn(n_samples, n_features).astype(np.float32)
     y = (x[:, 0] > 0).astype(np.float32)
 
-    model = Classifier(penalty=0.1, max_iter=10)
+    model = Classifier(max_bases=64, penalty=0.1, max_iter=10)
     model.fit(x, y, [False, False, False])
 
     explanation = model.explain(x)

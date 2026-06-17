@@ -30,6 +30,7 @@ impl DRLearner {
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
     /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
+    /// * `max_bases` - Maximum number of landmark points for the kernel feature map.
     /// * `mu_penalty` - Regularization penalty for the outcome models.
     /// * `p_penalty` - Regularization penalty for the propensity model.
     /// * `p_max_iter` - Maximum iterations for the propensity model solver.
@@ -39,6 +40,7 @@ impl DRLearner {
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
         is_categorical: &[bool],
+        max_bases: usize,
         mu_penalty: f32,
         p_penalty: f32,
         p_max_iter: usize,
@@ -47,7 +49,7 @@ impl DRLearner {
         let num_rows = x.nrows();
 
         // Fit KernelFeatureMap once and share it
-        let mut map = KernelFeatureMap::new();
+        let mut map = KernelFeatureMap::new(max_bases);
         map.fit(x, is_categorical);
         let shared_map = Arc::new(map);
 
@@ -60,13 +62,13 @@ impl DRLearner {
             || {
                 rayon::join(
                     || {
-                        let mut mu_t1 = Regressor::new(mu_penalty);
+                        let mut mu_t1 = Regressor::new(max_bases, mu_penalty);
                         mu_t1.kernel_feature_map = Some(shared_map.clone());
                         mu_t1.fit_weighted(x, y, &w_t1, is_categorical);
                         mu_t1.predict(x)
                     },
                     || {
-                        let mut mu_t0 = Regressor::new(mu_penalty);
+                        let mut mu_t0 = Regressor::new(max_bases, mu_penalty);
                         mu_t0.kernel_feature_map = Some(shared_map.clone());
                         mu_t0.fit_weighted(x, y, &w_t0, is_categorical);
                         mu_t0.predict(x)
@@ -74,7 +76,7 @@ impl DRLearner {
                 )
             },
             || {
-                let mut p = Classifier::new(p_penalty, p_max_iter);
+                let mut p = Classifier::new(max_bases, p_penalty, p_max_iter);
                 p.kernel_feature_map = Some(shared_map.clone());
                 p.fit(x, t, is_categorical);
                 p.predict(x)
@@ -96,7 +98,7 @@ impl DRLearner {
         });
 
         // Fit model on pseudo-outcomes
-        let mut tau = Regressor::new(tau_penalty);
+        let mut tau = Regressor::new(max_bases, tau_penalty);
         tau.kernel_feature_map = Some(shared_map.clone());
         tau.fit(x, y_dr.as_ref(), is_categorical);
 

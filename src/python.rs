@@ -111,6 +111,7 @@ macro_rules! impl_py_xmodels {
                 x: PyReadonlyArray2<f32>,
                 y: PyReadonlyArray1<f32>,
                 is_categorical: Vec<bool>,
+
             ) {
                 self.inner.fit(x.into_faer(), y.into_faer(), &is_categorical);
             }
@@ -197,61 +198,61 @@ macro_rules! impl_py_learner {
 // Generate Python bindings for kernel based predictive models
 impl_py_xmodels!(
     "Classifier", PyClassifier, Classifier,
-    (penalty: f32, max_iter: usize),
-    (penalty, max_iter)
+    (max_bases: usize, penalty: f32, max_iter: usize),
+    (max_bases, penalty, max_iter)
 );
 
 impl_py_xmodels!(
     "Regressor", PyRegressor, Regressor,
-    (penalty: f32),
-    (penalty)
+    (max_bases: usize, penalty: f32),
+    (max_bases, penalty)
 );
 
 // Generate Python bindings for causal metalearners
 impl_py_learner!(
     "DRLearner", PyDRLearner, DRLearner,
-    (mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
-    (mu_penalty, p_penalty, p_max_iter, tau_penalty)
+    (max_bases: usize, mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
+    (max_bases, mu_penalty, p_penalty, p_max_iter, tau_penalty)
 );
 
 impl_py_learner!(
     "GRLearner", PyGRLearner, GRLearner,
-    (mu_penalty: f32, p_penalty: f32, tau_penalty: f32),
-    (mu_penalty, p_penalty, tau_penalty)
+    (max_bases: usize, mu_penalty: f32, p_penalty: f32, tau_penalty: f32),
+    (max_bases, mu_penalty, p_penalty, tau_penalty)
 );
 
 impl_py_learner!(
     "MLearner", PyMLearner, MLearner,
-    (tau_penalty: f32),
-    (tau_penalty)
+    (max_bases: usize, tau_penalty: f32),
+    (max_bases, tau_penalty)
 );
 
 impl_py_learner!(
     "PWLearner", PyPWLearner, PWLearner,
-    (p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
-    (p_penalty, p_max_iter, tau_penalty)
+    (max_bases: usize, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
+    (max_bases, p_penalty, p_max_iter, tau_penalty)
 );
 
 impl_py_learner!(
     "SLearner", PySLearner, SLearner,
-    (mu_penalty: f32),
-    (mu_penalty)
+    (max_bases: usize, mu_penalty: f32),
+    (max_bases, mu_penalty)
 );
 
 impl_py_learner!(
     "RLearner", PyRLearner, RLearner,
-    (mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
-    (mu_penalty, p_penalty, p_max_iter, tau_penalty)
+    (max_bases: usize, mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
+    (max_bases, mu_penalty, p_penalty, p_max_iter, tau_penalty)
 );
 
 impl_py_learner!(
     "TLearner", PyTLearner, TLearner,
-    (mu_penalty: f32),
-    (mu_penalty)
+    (max_bases: usize, mu_penalty: f32),
+    (max_bases, mu_penalty)
 );
 
 impl_py_learner!(
     "XLearner", PyXLearner, XLearner,
-    (mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
-    (mu_penalty, p_penalty, p_max_iter, tau_penalty)
+    (max_bases: usize, mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
+    (max_bases, mu_penalty, p_penalty, p_max_iter, tau_penalty)
 );

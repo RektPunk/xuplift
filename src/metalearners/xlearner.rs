@@ -38,6 +38,7 @@ impl XLearner {
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
     /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
+    /// * `max_bases` - Maximum number of landmark points for the kernel feature map.
     /// * `mu_penalty` - Regularization penalty for the outcome models.
     /// * `p_penalty` - Regularization penalty for the propensity model.
     /// * `p_max_iter` - Maximum iterations for the propensity model solver.
@@ -47,6 +48,7 @@ impl XLearner {
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
         is_categorical: &[bool],
+        max_bases: usize,
         mu_penalty: f32,
         p_penalty: f32,
         p_max_iter: usize,
@@ -55,7 +57,7 @@ impl XLearner {
         let num_rows = x.nrows();
 
         // Fit KernelFeatureMap once and share it
-        let mut map = KernelFeatureMap::new();
+        let mut map = KernelFeatureMap::new(max_bases);
         map.fit(x, is_categorical);
         let shared_map = Arc::new(map);
 
@@ -66,13 +68,13 @@ impl XLearner {
         // Compute residuals by using outcome models concurrently
         let (d_0, d_1) = rayon::join(
             || {
-                let mut mu_t1 = Regressor::new(mu_penalty);
+                let mut mu_t1 = Regressor::new(max_bases, mu_penalty);
                 mu_t1.kernel_feature_map = Some(shared_map.clone());
                 mu_t1.fit_weighted(x, y, &w_t1, is_categorical);
                 mu_t1.predict(x) - y
             },
             || {
-                let mut mu_t0 = Regressor::new(mu_penalty);
+                let mut mu_t0 = Regressor::new(max_bases, mu_penalty);
                 mu_t0.kernel_feature_map = Some(shared_map.clone());
                 mu_t0.fit_weighted(x, y, &w_t0, is_categorical);
                 y - mu_t0.predict(x)
@@ -84,13 +86,13 @@ impl XLearner {
             || {
                 rayon::join(
                     || {
-                        let mut tau_t1 = Regressor::new(tau_penalty);
+                        let mut tau_t1 = Regressor::new(max_bases, tau_penalty);
                         tau_t1.kernel_feature_map = Some(shared_map.clone());
                         tau_t1.fit_weighted(x, d_1.as_ref(), &w_t1, is_categorical);
                         tau_t1
                     },
                     || {
-                        let mut tau_t0 = Regressor::new(tau_penalty);
+                        let mut tau_t0 = Regressor::new(max_bases, tau_penalty);
                         tau_t0.kernel_feature_map = Some(shared_map.clone());
                         tau_t0.fit_weighted(x, d_0.as_ref(), &w_t0, is_categorical);
                         tau_t0
@@ -98,7 +100,7 @@ impl XLearner {
                 )
             },
             || {
-                let mut p = Classifier::new(p_penalty, p_max_iter);
+                let mut p = Classifier::new(max_bases, p_penalty, p_max_iter);
                 p.kernel_feature_map = Some(shared_map.clone());
                 p.fit(x, t, is_categorical);
                 p

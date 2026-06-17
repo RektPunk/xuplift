@@ -37,7 +37,7 @@ fn test_gaussian_classification() {
     }
 
     // --- Model Initialization ---
-    let mut model = Classifier::new(0.1, 10);
+    let mut model = Classifier::new(64, 0.1, 10);
     let is_categorical = vec![false; n_features];
     model.fit(x.as_ref(), y.as_ref(), &is_categorical);
 
@@ -105,7 +105,7 @@ fn test_classifier_with_nans() {
     }
 
     // --- Model Initialization ---
-    let mut model = Classifier::new(0.1, 10);
+    let mut model = Classifier::new(64, 0.1, 10);
     let is_categorical = vec![false; n_features];
     model.fit(x.as_ref(), y.as_ref(), &is_categorical);
 
