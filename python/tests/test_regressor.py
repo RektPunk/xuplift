@@ -11,7 +11,7 @@ def test_regressor_fit_predict():
         np.float32
     )
 
-    model = Regressor(penalty=0.1)
+    model = Regressor(max_bases=64, penalty=0.1)
     model.fit(x, y, [False, False])
 
     preds = model.predict(x)
@@ -28,7 +28,7 @@ def test_regressor_explain():
     x = np.random.randn(n_samples, n_features).astype(np.float32)
     y = (x[:, 0] * 5).astype(np.float32)
 
-    model = Regressor(penalty=0.1)
+    model = Regressor(max_bases=64, penalty=0.1)
     model.fit(x, y, [False, False, False])
 
     explanation = model.explain(x)

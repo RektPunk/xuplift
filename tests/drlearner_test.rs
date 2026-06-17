@@ -43,6 +43,7 @@ fn test_drlearner() {
         t.as_ref(),
         y.as_ref(),
         &is_categorical,
+        64,
         0.1,
         0.1,
         20,

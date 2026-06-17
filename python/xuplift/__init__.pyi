@@ -9,10 +9,10 @@ class XModel:
     def explain(self, x: NDArray[np.float32]) -> NDArray[np.float32]: ...
 
 class Classifier(XModel):
-    def __init__(self, penalty: float, max_iter: int) -> None: ...
+    def __init__(self, max_bases: int, penalty: float, max_iter: int) -> None: ...
 
 class Regressor(XModel):
-    def __init__(self, penalty: float) -> None: ...
+    def __init__(self, max_bases: int, penalty: float) -> None: ...
 
 class Learner:
     def predict_uplift(self, x: NDArray[np.float32]) -> NDArray[np.float32]: ...
@@ -25,6 +25,7 @@ class DRLearner(Learner):
         t: NDArray[np.float32],
         y: NDArray[np.float32],
         is_categorical: list[bool],
+        max_bases: int,
         mu_penalty: float,
         p_penalty: float,
         p_max_iter: int,
@@ -38,6 +39,7 @@ class GRLearner(Learner):
         t: NDArray[np.float32],
         y: NDArray[np.float32],
         is_categorical: list[bool],
+        max_bases: int,
         mu_penalty: float,
         p_penalty: float,
         tau_penalty: float,
@@ -50,6 +52,7 @@ class MLearner(Learner):
         t: NDArray[np.float32],
         y: NDArray[np.float32],
         is_categorical: list[bool],
+        max_bases: int,
         tau_penalty: float,
     ) -> None: ...
 
@@ -60,6 +63,7 @@ class PWLearner(Learner):
         t: NDArray[np.float32],
         y: NDArray[np.float32],
         is_categorical: list[bool],
+        max_bases: int,
         p_penalty: float,
         p_max_iter: int,
         tau_penalty: float,
@@ -72,6 +76,7 @@ class RLearner(Learner):
         t: NDArray[np.float32],
         y: NDArray[np.float32],
         is_categorical: list[bool],
+        max_bases: int,
         mu_penalty: float,
         p_penalty: float,
         p_max_iter: int,
@@ -85,6 +90,7 @@ class SLearner(Learner):
         t: NDArray[np.float32],
         y: NDArray[np.float32],
         is_categorical: list[bool],
+        max_bases: int,
         mu_penalty: float,
     ) -> None: ...
 
@@ -95,6 +101,7 @@ class TLearner(Learner):
         t: NDArray[np.float32],
         y: NDArray[np.float32],
         is_categorical: list[bool],
+        max_bases: int,
         mu_penalty: float,
     ) -> None: ...
 
@@ -105,6 +112,7 @@ class XLearner(Learner):
         t: NDArray[np.float32],
         y: NDArray[np.float32],
         is_categorical: list[bool],
+        max_bases: int,
         mu_penalty: float,
         p_penalty: float,
         p_max_iter: int,

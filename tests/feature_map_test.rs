@@ -6,7 +6,7 @@ fn test_feature_map_basic_functionality() {
     // --- Model Initialization ---
     // Verify that the KernelFeatureMap initializes and fits correctly on a standard linear dataset.
     let data = Mat::from_fn(10, 2, |r, c| (r as f32) + (c as f32));
-    let mut map = KernelFeatureMap::new();
+    let mut map = KernelFeatureMap::new(64);
     let is_categorical = vec![false; 2];
     map.fit(data.as_ref(), &is_categorical);
 
@@ -24,7 +24,7 @@ fn test_transform_feature_into() {
     // --- Model Initialization ---
     // Verify that the transform operation produces matrices with the correct dimensions.
     let data = Mat::from_fn(5, 2, |r, c| (r as f32) * (c as f32 + 1.0));
-    let mut map = KernelFeatureMap::new();
+    let mut map = KernelFeatureMap::new(64);
     let is_categorical = vec![false; 2];
     map.fit(data.as_ref(), &is_categorical);
 
@@ -42,7 +42,7 @@ fn test_transform_row_matches_feature_transform() {
     // --- Model Initialization ---
     // Verify that transforming rows individually yields identical results to feature-wise transformation.
     let data = Mat::from_fn(5, 2, |r, c| (r as f32) + (c as f32));
-    let mut map = KernelFeatureMap::new();
+    let mut map = KernelFeatureMap::new(64);
 
     let is_categorical = vec![false; 2];
     map.fit(data.as_ref(), &is_categorical);
@@ -86,7 +86,7 @@ fn test_nan_handling_in_feature_map() {
     });
 
     // --- Model Initialization ---
-    let mut map = KernelFeatureMap::new();
+    let mut map = KernelFeatureMap::new(64);
     let is_categorical = vec![false; 1];
     map.fit(data.as_ref(), &is_categorical);
 

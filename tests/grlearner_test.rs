@@ -45,6 +45,7 @@ fn test_grlearner() {
         t.as_ref(),
         y.as_ref(),
         &is_categorical,
+        64,
         0.001,
         0.001,
         0.001,
