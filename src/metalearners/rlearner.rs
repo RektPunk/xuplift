@@ -28,7 +28,7 @@ impl RLearner {
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
     /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
-    /// * `max_bases` - Maximum number of bases for the kernel feature map.
+    /// * `max_bases` - Maximum number of landmark points for the kernel feature map.
     /// * `mu_penalty` - Regularization penalty for the outcome model.
     /// * `p_penalty` - Regularization penalty for the propensity model.
     /// * `p_max_iter` - Maximum iterations for the propensity model solver.

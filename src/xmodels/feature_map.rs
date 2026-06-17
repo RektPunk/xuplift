@@ -123,7 +123,7 @@ impl KernelFeatureMap {
                 dists.sort_by(|a, b| a.total_cmp(b));
                 let median = if !dists.is_empty() {
                     let mid = dists.len() / 2;
-                    if dists.len() % 2 == 0 {
+                    if dists.len().is_multiple_of(2) {
                         (dists[mid] + dists[mid - 1]) * 0.5
                     } else {
                         dists[mid]

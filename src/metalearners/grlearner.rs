@@ -27,7 +27,7 @@ impl GRLearner {
     /// * `t` - Treatment vector (n_samples, continuous or binary).
     /// * `y` - Outcome vector (n_samples).
     /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
-    /// * `max_bases` - Maximum number of bases for the kernel feature map.
+    /// * `max_bases` - Maximum number of landmark points for the kernel feature map.
     /// * `mu_penalty` - Regularization penalty for the outcome model.
     /// * `p_penalty` - Regularization penalty for the treatment model.
     /// * `tau_penalty` - Regularization penalty for the treatment effect model.

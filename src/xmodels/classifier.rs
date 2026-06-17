@@ -19,7 +19,7 @@ use crate::xmodels::feature_map::KernelFeatureMap;
 pub struct Classifier {
     /// The kernel_feature_map responsible for kernel-based feature mapping.
     pub kernel_feature_map: Option<Arc<KernelFeatureMap>>,
-    /// The maximum number of bases used in the kernel feature map.
+    /// The maximum number of landmark points used in the kernel feature map.
     pub max_bases: usize,
     /// The Ridge regularization penalty factor.
     pub penalty: f32,
