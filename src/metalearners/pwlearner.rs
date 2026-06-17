@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use faer::{Col, ColRef, Mat, MatRef};
 
 use crate::xmodels::classifier::Classifier;
+use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
 /// Propensity Score Weighted Learner (PW-Learner) for Uplift Modeling.
@@ -22,6 +25,7 @@ impl PWLearner {
     /// * `x` - Feature matrix (n_samples x n_features).
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
+    /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
     /// * `p_penalty` - Regularization penalty for the propensity model.
     /// * `p_max_iter` - Maximum iterations for the propensity model solver.
     /// * `tau_penalty` - Regularization penalty for the treatment effect model.
@@ -29,15 +33,22 @@ impl PWLearner {
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
+        is_categorical: &[bool],
         p_penalty: f32,
         p_max_iter: usize,
         tau_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
 
+        // Fit KernelFeatureMap once and share it
+        let mut map = KernelFeatureMap::new();
+        map.fit(x, is_categorical);
+        let shared_map = Arc::new(map);
+
         // Fit and predict propensity score model
         let mut p = Classifier::new(p_penalty, p_max_iter);
-        p.fit(x, t);
+        p.kernel_feature_map = Some(shared_map.clone());
+        p.fit(x, t, is_categorical);
         let p_pred = p.predict(x);
 
         // Construct pseudo-outcomes in parallel
@@ -54,7 +65,8 @@ impl PWLearner {
 
         // Fit model on pseudo-outcomes
         let mut tau = Regressor::new(tau_penalty);
-        tau.fit(x, y_pw.as_ref());
+        tau.kernel_feature_map = Some(shared_map.clone());
+        tau.fit(x, y_pw.as_ref(), is_categorical);
 
         Self { tau }
     }

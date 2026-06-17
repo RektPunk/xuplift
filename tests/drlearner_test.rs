@@ -37,7 +37,17 @@ fn test_drlearner() {
     // DR-Learner fits 4 models:
     // Stage 1: mu_1, mu_0 (base outcomes) | Stage 2: p (propensity score)
     // Stage 3: Construct pseudo-outcomes | Stage 4: tau (CATE regressor)
-    let drlearner = DRLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
+    let is_categorical = vec![false; n_features];
+    let drlearner = DRLearner::new(
+        x.as_ref(),
+        t.as_ref(),
+        y.as_ref(),
+        &is_categorical,
+        0.1,
+        0.1,
+        20,
+        0.1,
+    );
 
     // --- Prediction ---
     let uplift_estimate = drlearner.predict_uplift(x.as_ref());

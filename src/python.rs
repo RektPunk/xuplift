@@ -106,8 +106,13 @@ macro_rules! impl_py_xmodels {
                 Self { inner: model }
             }
 
-            fn fit(&mut self, x: PyReadonlyArray2<f32>, y: PyReadonlyArray1<f32>) {
-                self.inner.fit(x.into_faer(), y.into_faer());
+            fn fit(
+                &mut self,
+                x: PyReadonlyArray2<f32>,
+                y: PyReadonlyArray1<f32>,
+                is_categorical: Vec<bool>,
+            ) {
+                self.inner.fit(x.into_faer(), y.into_faer(), &is_categorical);
             }
 
             fn predict<'py>(
@@ -160,6 +165,7 @@ macro_rules! impl_py_learner {
                 x: PyReadonlyArray2<f32>,
                 t: PyReadonlyArray1<f32>,
                 y: PyReadonlyArray1<f32>,
+                is_categorical: Vec<bool>,
                 $($args : $types),*
             ) -> Self {
                 let x_mat = x.into_faer();
@@ -169,6 +175,7 @@ macro_rules! impl_py_learner {
                     x_mat,
                     t_col,
                     y_col,
+                    &is_categorical,
                     $($pass_args),*
                 );
                 Self { inner: model }

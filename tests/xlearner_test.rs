@@ -36,7 +36,17 @@ fn test_xlearner() {
     // --- Model Initialization ---
     // X-Learner fits 5 models:
     // Stage 1: mu_1, mu_0 | Stage 2: tau_1, tau_0 | Stage 3: p (propensity)
-    let xlearner = XLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1, 0.1, 20, 0.1);
+    let is_categorical = vec![false; n_features];
+    let xlearner = XLearner::new(
+        x.as_ref(),
+        t.as_ref(),
+        y.as_ref(),
+        &is_categorical,
+        0.1,
+        0.1,
+        20,
+        0.1,
+    );
 
     // --- Prediction ---
     let uplift_estimate = xlearner.predict_uplift(x.as_ref());

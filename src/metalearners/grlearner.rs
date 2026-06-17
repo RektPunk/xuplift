@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use faer::{Col, ColRef, Mat, MatRef};
 
+use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
 /// Generalized R-Learner (GR-Learner) for Uplift Modeling.
@@ -23,6 +26,7 @@ impl GRLearner {
     /// * `x` - Feature matrix (n_samples x n_features).
     /// * `t` - Treatment vector (n_samples, continuous or binary).
     /// * `y` - Outcome vector (n_samples).
+    /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
     /// * `mu_penalty` - Regularization penalty for the outcome model.
     /// * `p_penalty` - Regularization penalty for the treatment model.
     /// * `tau_penalty` - Regularization penalty for the treatment effect model.
@@ -30,22 +34,30 @@ impl GRLearner {
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
+        is_categorical: &[bool],
         mu_penalty: f32,
         p_penalty: f32,
         tau_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
 
+        // Fit KernelFeatureMap once and share it
+        let mut map = KernelFeatureMap::new();
+        map.fit(x, is_categorical);
+        let shared_map = Arc::new(map);
+
         // Fit and predict outcome model mu(x) and treatment model p(x) concurrently
         let (mu_pred, p_pred) = rayon::join(
             || {
                 let mut mu = Regressor::new(mu_penalty);
-                mu.fit(x, y);
+                mu.kernel_feature_map = Some(shared_map.clone());
+                mu.fit(x, y, is_categorical);
                 mu.predict(x)
             },
             || {
                 let mut p = Regressor::new(p_penalty);
-                p.fit(x, t);
+                p.kernel_feature_map = Some(shared_map.clone());
+                p.fit(x, t, is_categorical);
                 p.predict(x)
             },
         );
@@ -70,7 +82,8 @@ impl GRLearner {
 
         // Fit model on weighted targets
         let mut tau = Regressor::new(tau_penalty);
-        tau.fit_weighted(x, r_target_col.as_ref(), &r_weights_col);
+        tau.kernel_feature_map = Some(shared_map.clone());
+        tau.fit_weighted(x, r_target_col.as_ref(), &r_weights_col, is_categorical);
 
         Self { tau }
     }

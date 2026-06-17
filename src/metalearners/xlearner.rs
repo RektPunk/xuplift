@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use faer::{Col, ColRef, Mat, MatRef};
 
 use crate::xmodels::classifier::Classifier;
+use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
 /// X-Learner (Cross-Learner) for Uplift Modeling.
@@ -34,6 +37,7 @@ impl XLearner {
     /// * `x` - Feature matrix (n_samples x n_features).
     /// * `t` - Treatment vector (n_samples).
     /// * `y` - Outcome vector (n_samples).
+    /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
     /// * `mu_penalty` - Regularization penalty for the outcome models.
     /// * `p_penalty` - Regularization penalty for the propensity model.
     /// * `p_max_iter` - Maximum iterations for the propensity model solver.
@@ -42,12 +46,18 @@ impl XLearner {
         x: MatRef<'_, f32>,
         t: ColRef<'_, f32>,
         y: ColRef<'_, f32>,
+        is_categorical: &[bool],
         mu_penalty: f32,
         p_penalty: f32,
         p_max_iter: usize,
         tau_penalty: f32,
     ) -> Self {
         let num_rows = x.nrows();
+
+        // Fit KernelFeatureMap once and share it
+        let mut map = KernelFeatureMap::new();
+        map.fit(x, is_categorical);
+        let shared_map = Arc::new(map);
 
         // Create weights for T=1 and T=0
         let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
@@ -57,12 +67,14 @@ impl XLearner {
         let (d_0, d_1) = rayon::join(
             || {
                 let mut mu_t1 = Regressor::new(mu_penalty);
-                mu_t1.fit_weighted(x, y, &w_t1);
+                mu_t1.kernel_feature_map = Some(shared_map.clone());
+                mu_t1.fit_weighted(x, y, &w_t1, is_categorical);
                 mu_t1.predict(x) - y
             },
             || {
                 let mut mu_t0 = Regressor::new(mu_penalty);
-                mu_t0.fit_weighted(x, y, &w_t0);
+                mu_t0.kernel_feature_map = Some(shared_map.clone());
+                mu_t0.fit_weighted(x, y, &w_t0, is_categorical);
                 y - mu_t0.predict(x)
             },
         );
@@ -73,19 +85,22 @@ impl XLearner {
                 rayon::join(
                     || {
                         let mut tau_t1 = Regressor::new(tau_penalty);
-                        tau_t1.fit_weighted(x, d_1.as_ref(), &w_t1);
+                        tau_t1.kernel_feature_map = Some(shared_map.clone());
+                        tau_t1.fit_weighted(x, d_1.as_ref(), &w_t1, is_categorical);
                         tau_t1
                     },
                     || {
                         let mut tau_t0 = Regressor::new(tau_penalty);
-                        tau_t0.fit_weighted(x, d_0.as_ref(), &w_t0);
+                        tau_t0.kernel_feature_map = Some(shared_map.clone());
+                        tau_t0.fit_weighted(x, d_0.as_ref(), &w_t0, is_categorical);
                         tau_t0
                     },
                 )
             },
             || {
                 let mut p = Classifier::new(p_penalty, p_max_iter);
-                p.fit(x, t);
+                p.kernel_feature_map = Some(shared_map.clone());
+                p.fit(x, t, is_categorical);
                 p
             },
         );

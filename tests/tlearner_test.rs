@@ -33,7 +33,8 @@ fn test_tlearner() {
     }
 
     // --- Model Initialization ---
-    let tlearner = TLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.01);
+    let is_categorical = vec![false; n_features];
+    let tlearner = TLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), &is_categorical, 0.01);
 
     // --- Prediction ---
     let uplift_estimate = tlearner.predict_uplift(x.as_ref());

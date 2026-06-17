@@ -33,7 +33,8 @@ fn test_mlearner() {
 
     // --- Model Initialization ---
     // MLearner applies target transformation and fits a tau model on the pseudo-outcomes.
-    let mlearner = MLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), 0.1);
+    let is_categorical = vec![false; n_features];
+    let mlearner = MLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), &is_categorical, 0.1);
 
     // --- Prediction ---
     let uplift_estimate = mlearner.predict_uplift(x.as_ref());
