@@ -15,6 +15,8 @@ use crate::xmodels::feature_map::KernelFeatureMap;
 pub struct Regressor {
     /// The kernel_feature_map responsible for kernel-based feature mapping.
     pub kernel_feature_map: Option<Arc<KernelFeatureMap>>,
+    /// The maximum number of bases used in the kernel feature map.
+    pub max_bases: usize,
     /// The Ridge regularization penalty factor.
     pub penalty: f32,
     /// The global mean of the target variable (used for centering).
@@ -25,9 +27,10 @@ pub struct Regressor {
 
 impl Regressor {
     /// Creates a new Regressor instance.
-    pub fn new(penalty: f32) -> Self {
+    pub fn new(max_bases: usize, penalty: f32) -> Self {
         Self {
             kernel_feature_map: None,
+            max_bases,
             penalty,
             base_value: 0.0,
             coefficients: Vec::new(),
@@ -54,7 +57,7 @@ impl Regressor {
         is_categorical: &[bool],
     ) {
         if self.kernel_feature_map.is_none() {
-            let mut map = KernelFeatureMap::new();
+            let mut map = KernelFeatureMap::new(self.max_bases);
             map.fit(x, is_categorical);
             self.kernel_feature_map = Some(Arc::new(map));
         }

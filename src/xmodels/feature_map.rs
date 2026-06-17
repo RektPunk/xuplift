@@ -13,7 +13,6 @@ use rayon::prelude::*;
 /// $$K \approx K_{nm} K_{mm}^{-1} K_{mn}$$
 /// where $K_{nm}$ is the kernel between all $n$ samples and $m$ landmarks,
 /// and $K_{mm}$ is the kernel between landmarks.
-#[derive(Default)]
 pub struct KernelFeatureMap {
     /// Number of input features (columns).
     pub num_features: usize,
@@ -37,12 +36,17 @@ pub struct KernelFeatureMap {
 }
 
 impl KernelFeatureMap {
-    const MAX_BASES: usize = 64;
-    const MAX_DIST_PAIRS: usize = Self::MAX_BASES * (Self::MAX_BASES - 1) / 2;
-
     /// Returns a new KernelFeatureMap instance
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(max_bases: usize) -> Self {
+        Self {
+            num_features: 0,
+            num_bases: max_bases,
+            feature_bases: Vec::new(),
+            is_categorical: Vec::new(),
+            proj_matrices: Vec::new(),
+            feature_means: Vec::new(),
+            s2_invs: Vec::new(),
+        }
     }
 
     /// Fits the transformer to the input matrix X.
@@ -76,21 +80,22 @@ impl KernelFeatureMap {
             .collect();
         let n_valid = valid_row_indices.len();
 
-        // Select landmarks (defaults to min(N, MAX_BASES) for efficiency)
-        let landmark_indices = if n_valid >= Self::MAX_BASES / 2 {
-            self.num_bases = n_valid.min(Self::MAX_BASES);
+        // Select landmarks
+        let landmark_indices = if n_valid >= self.num_bases / 2 {
+            self.num_bases = n_valid.min(self.num_bases);
             let mut rng = rng();
             let mut indices = valid_row_indices.clone();
             indices.shuffle(&mut rng);
             indices[..self.num_bases].to_vec()
         } else {
-            self.num_bases = n_samples.min(Self::MAX_BASES);
+            self.num_bases = n_samples.min(self.num_bases);
             let mut all_indices: Vec<usize> = (0..n_samples).collect();
             let mut rng = rng();
             all_indices.shuffle(&mut rng);
             all_indices[..self.num_bases].to_vec()
         };
 
+        let max_dist_pairs = self.num_bases * (self.num_bases - 1) / 2;
         let feature_params: Vec<_> = (0..self.num_features)
             .into_par_iter()
             .map(|f_idx| {
@@ -98,7 +103,7 @@ impl KernelFeatureMap {
                 let is_categorical_f = is_categorical[f_idx];
 
                 // Median Heuristic: sets sigma to the median of pairwise distances between landmarks
-                let mut dists_buf = [0.0f32; Self::MAX_DIST_PAIRS];
+                let mut dists_buf = vec![0.0f32; max_dist_pairs];
                 let mut dists_count = 0;
                 for b_i_idx in 0..self.num_bases {
                     let val_i = {
@@ -215,7 +220,7 @@ impl KernelFeatureMap {
     pub fn transform_row_into(&self, x: MatRef<'_, f32>, r_idx: usize, mut out: ColMut<'_, f32>) {
         // Temporary buffer on the stack to store intermediate kernel calculations
         // Capped at MAX_BASES as per the Nystrom landmark selection logic
-        let mut kernel_cache = [0.0f32; Self::MAX_BASES];
+        let mut kernel_cache = vec![0.0f32; self.num_bases];
         for f_idx in 0..self.num_features {
             let x_val = x[(r_idx, f_idx)];
             let is_categorical_f = self.is_categorical[f_idx];
@@ -289,7 +294,7 @@ impl KernelFeatureMap {
 
             // Temporary buffer on the stack to store intermediate kernel calculations
             // Capped at MAX_BASES as per the Nystrom landmark selection logic
-            let mut kernel_cache = [0.0f32; Self::MAX_BASES];
+            let mut kernel_cache = vec![0.0f32; self.num_bases];
 
             // Pre-calculate RBF kernel distances between input and landmarks
             for b_idx in 0..self.num_bases {
