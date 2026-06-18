@@ -51,7 +51,7 @@ impl KernelFeatureMap {
 
     #[inline]
     fn kernel_categorical(diff: f32) -> f32 {
-        if diff.abs() < f32::EPSILON { 1.0 } else { 0.0 }
+        if diff.abs() < 1e-5 { 1.0 } else { 0.0 }
     }
 
     #[inline]
