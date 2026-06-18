@@ -296,7 +296,11 @@ impl KernelFeatureMap {
         for p_idx in 0..self.num_bases {
             let m_val = mean[p_idx];
             for r_idx in 0..n_samples {
-                out[(r_idx, p_idx)] -= m_val;
+                if x[(r_idx, f_idx)].is_nan() {
+                    out[(r_idx, p_idx)] = 0.0;
+                } else {
+                    out[(r_idx, p_idx)] -= m_val;
+                }
             }
         }
     }

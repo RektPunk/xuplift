@@ -1,4 +1,4 @@
-use faer::{Col, Mat};
+use faer::Mat;
 use xuplift::xmodels::feature_map::KernelFeatureMap;
 
 #[test]
@@ -38,35 +38,35 @@ fn test_transform_feature_into() {
 }
 
 #[test]
-fn test_transform_row_matches_feature_transform() {
+fn test_full_transform_matches_feature_transform() {
     // --- Model Initialization ---
-    // Verify that transforming rows individually yields identical results to feature-wise transformation.
+    // Verify that transforming the full matrix via `transform` yields identical results
+    // to feature-wise transformation (`transform_feature_into`) at the correct column offsets.
     let data = Mat::from_fn(5, 2, |r, c| (r as f32) + (c as f32));
     let mut map = KernelFeatureMap::new(64);
 
     let is_categorical = vec![false; 2];
     map.fit(data.as_ref(), &is_categorical);
 
-    // --- Verification ---
+    let full_transformed = map.transform(data.as_ref());
+
     for f_idx in 0..map.num_features {
         let mut transformed_feat = Mat::<f32>::zeros(5, map.num_bases);
         map.transform_feature_into(data.as_ref(), f_idx, transformed_feat.as_mut());
-
+        let offset = f_idx * map.num_bases;
         for r_idx in 0..5 {
-            let total_dim = map.num_features * map.num_bases;
-            let mut transformed_row = Col::<f32>::zeros(total_dim);
-            map.transform_row_into(data.as_ref(), r_idx, transformed_row.as_mut());
-
-            let offset = f_idx * map.num_bases;
             for b in 0..map.num_bases {
                 let feat_val = transformed_feat[(r_idx, b)];
-                let row_val = transformed_row[offset + b];
+                let full_val = full_transformed[(r_idx, offset + b)];
+
                 assert!(
-                    (feat_val - row_val).abs() < 1e-5,
-                    "Mismatch at row {} feat {} base {}",
+                    (feat_val - full_val).abs() < 1e-5,
+                    "Mismatch at row {} feat {} base {}. Feat val: {}, Full val: {}",
                     r_idx,
                     f_idx,
-                    b
+                    b,
+                    feat_val,
+                    full_val
                 );
             }
         }
@@ -76,7 +76,7 @@ fn test_transform_row_matches_feature_transform() {
 #[test]
 fn test_nan_handling_in_feature_map() {
     // --- Synthetic Data Generation ---
-    // Create a matrix with some NaNs to verify robust handling
+    // Create a matrix with some NaNs to verify robust handling during training
     let data = Mat::from_fn(4, 1, |r, _| match r {
         0 => 1.0,
         1 => f32::NAN,
@@ -91,25 +91,37 @@ fn test_nan_handling_in_feature_map() {
     map.fit(data.as_ref(), &is_categorical);
 
     // --- Verification ---
-    // Test transform_row with a NaN row
+    // Test `transform` with a NaN row
     // Verify that the transformer correctly masks NaNs by outputting a zero vector.
     let x_nan = Mat::from_fn(1, 1, |_, _| f32::NAN);
+    let z_nan = map.transform(x_nan.as_ref());
 
-    let total_dim = map.num_features * map.num_bases;
-    let mut z_nan = Col::<f32>::zeros(total_dim);
-    map.transform_row_into(x_nan.as_ref(), 0, z_nan.as_mut());
-    assert!(
-        z_nan.iter().all(|&val| val == 0.0),
-        "Output for NaN should be zero vector"
-    );
+    for r in 0..z_nan.nrows() {
+        for c in 0..z_nan.ncols() {
+            assert_eq!(
+                z_nan[(r, c)],
+                0.0,
+                "Output for NaN at ({}, {}) should be exactly 0.0",
+                r,
+                c
+            );
+        }
+    }
 
-    // Test transform_row with a valid row
+    // Test `transform` with a valid row
     let x_valid = Mat::from_fn(1, 1, |_, _| 2.0);
-    let total_dim = map.num_features * map.num_bases;
-    let mut z_valid = Col::<f32>::zeros(total_dim);
-    map.transform_row_into(x_valid.as_ref(), 0, z_valid.as_mut());
+    let z_valid = map.transform(x_valid.as_ref());
+
+    let mut has_non_zero = false;
+    for r in 0..z_valid.nrows() {
+        for c in 0..z_valid.ncols() {
+            if z_valid[(r, c)] != 0.0 {
+                has_non_zero = true;
+            }
+        }
+    }
     assert!(
-        z_valid.iter().any(|&val| val != 0.0),
-        "Output for valid value should not be zero vector"
+        has_non_zero,
+        "Output for valid value should contain non-zero elements"
     );
 }
