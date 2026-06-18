@@ -61,6 +61,10 @@ impl XLearner {
         map.fit(x, is_categorical);
         let shared_map = Arc::new(map);
 
+        // Pre-compute Z matrix once
+        let z = shared_map.transform(x);
+        let z_ref = z.as_ref();
+
         // Create weights for T=1 and T=0
         let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
         let w_t0 = Col::<f32>::from_fn(num_rows, |i| if t[i] <= 0.5 { 1.0 } else { 0.0 });
@@ -70,14 +74,14 @@ impl XLearner {
             || {
                 let mut mu_t1 = Regressor::new(max_bases, mu_penalty);
                 mu_t1.kernel_feature_map = Some(shared_map.clone());
-                mu_t1.fit_weighted(x, y, &w_t1, is_categorical);
-                mu_t1.predict(x) - y
+                mu_t1.fit_with_z(z_ref, y, &w_t1);
+                mu_t1.predict_with_z(z_ref) - y
             },
             || {
                 let mut mu_t0 = Regressor::new(max_bases, mu_penalty);
                 mu_t0.kernel_feature_map = Some(shared_map.clone());
-                mu_t0.fit_weighted(x, y, &w_t0, is_categorical);
-                y - mu_t0.predict(x)
+                mu_t0.fit_with_z(z_ref, y, &w_t0);
+                y - mu_t0.predict_with_z(z_ref)
             },
         );
 
@@ -88,13 +92,13 @@ impl XLearner {
                     || {
                         let mut tau_t1 = Regressor::new(max_bases, tau_penalty);
                         tau_t1.kernel_feature_map = Some(shared_map.clone());
-                        tau_t1.fit_weighted(x, d_1.as_ref(), &w_t1, is_categorical);
+                        tau_t1.fit_with_z(z_ref, d_1.as_ref(), &w_t1);
                         tau_t1
                     },
                     || {
                         let mut tau_t0 = Regressor::new(max_bases, tau_penalty);
                         tau_t0.kernel_feature_map = Some(shared_map.clone());
-                        tau_t0.fit_weighted(x, d_0.as_ref(), &w_t0, is_categorical);
+                        tau_t0.fit_with_z(z_ref, d_0.as_ref(), &w_t0);
                         tau_t0
                     },
                 )
@@ -102,7 +106,7 @@ impl XLearner {
             || {
                 let mut p = Classifier::new(max_bases, p_penalty, p_max_iter);
                 p.kernel_feature_map = Some(shared_map.clone());
-                p.fit(x, t, is_categorical);
+                p.fit_with_z(z_ref, t);
                 p
             },
         );

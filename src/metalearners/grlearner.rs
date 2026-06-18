@@ -48,19 +48,25 @@ impl GRLearner {
         map.fit(x, is_categorical);
         let shared_map = Arc::new(map);
 
+        // Pre-compute Z matrix once
+        let z = shared_map.transform(x);
+        let z_ref = z.as_ref();
+
+        let w_all = Col::<f32>::full(num_rows, 1.0);
+
         // Fit and predict outcome model mu(x) and treatment model p(x) concurrently
         let (mu_pred, p_pred) = rayon::join(
             || {
                 let mut mu = Regressor::new(max_bases, mu_penalty);
                 mu.kernel_feature_map = Some(shared_map.clone());
-                mu.fit(x, y, is_categorical);
-                mu.predict(x)
+                mu.fit_with_z(z_ref, y, &w_all);
+                mu.predict_with_z(z_ref)
             },
             || {
                 let mut p = Regressor::new(max_bases, p_penalty);
                 p.kernel_feature_map = Some(shared_map.clone());
-                p.fit(x, t, is_categorical);
-                p.predict(x)
+                p.fit_with_z(z_ref, t, &w_all);
+                p.predict_with_z(z_ref)
             },
         );
 
@@ -70,7 +76,7 @@ impl GRLearner {
         let r_target_col = Col::<f32>::from_fn(num_rows, |i| {
             let y_tilde = y[i] - mu_pred[i];
             let t_tilde = t[i] - p_pred[i];
-            if t_tilde.abs() > 1e-6 {
+            if t_tilde.abs() > 1e-5 {
                 y_tilde / t_tilde
             } else {
                 0.0
@@ -85,7 +91,7 @@ impl GRLearner {
         // Fit model on weighted targets
         let mut tau = Regressor::new(max_bases, tau_penalty);
         tau.kernel_feature_map = Some(shared_map.clone());
-        tau.fit_weighted(x, r_target_col.as_ref(), &r_weights_col, is_categorical);
+        tau.fit_with_z(z_ref, r_target_col.as_ref(), &r_weights_col);
 
         Self { tau }
     }

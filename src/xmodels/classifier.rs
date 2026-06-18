@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use faer::prelude::Solve;
-use faer::{Col, ColRef, Mat, MatRef};
+use faer::{Col, ColRef, Mat, MatMut, MatRef};
 use rayon::iter::IndexedParallelIterator;
 use rayon::prelude::*;
 
@@ -13,7 +13,6 @@ use crate::xmodels::feature_map::KernelFeatureMap;
 /// $$P(y=1|z) = \sigma(z^T w + b)$$
 /// where $\sigma(x) = \frac{1}{1 + e^{-x}}$ is the sigmoid function,
 /// $w$ are the coefficients, and $b$ is the intercept.
-///
 /// The model is fitted using the IRLS algorithm, which iteratively updates weights $w$:
 /// $w_{new} = w_{old} + (Z^T R Z + \lambda I)^{-1} Z^T (y - \mu)$
 /// where $R$ is a diagonal matrix with $R_{ii} = \mu_i (1 - \mu_i)$.
@@ -50,66 +49,40 @@ impl Classifier {
         1.0 / (1.0 + (-x).exp())
     }
 
-    /// Fits the binary classifier using the IRLS algorithm.
+    /// Fits the binary classifier using the IRLS algorithm with a pre-computed Z matrix.
     ///
-    /// This implementation uses target centering (y - mean) to align with the Regressor's logic.
+    /// This method uses target centering (y - mean) to align with the Regressor's logic.
     /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column:
     /// $w_{new} = w_{old} + (Z^T R Z + \lambda I)^{-1} Z^T (y - \mu)$
-    pub fn fit(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>, is_categorical: &[bool]) {
-        if self.kernel_feature_map.is_none() {
-            let mut map = KernelFeatureMap::new(self.max_bases);
-            map.fit(x, is_categorical);
-            self.kernel_feature_map = Some(Arc::new(map));
-        }
-
-        let map = self.kernel_feature_map.as_ref().unwrap();
-
-        // Allocate space for coefficients and compute initial values
-        let n_samples = x.nrows();
-        let n_features = map.num_features;
-        let n_bases = map.num_bases;
-        let total_dim = n_features * n_bases;
-
-        // Validate that the number of rows matches the number of target values and weights
-        if n_samples != y.nrows() {
-            panic!(
-                "Mismatched dimensions: The number of rows in X ({}) must match the number of target values ({}).",
-                n_samples,
-                y.nrows()
-            );
-        }
+    pub fn fit_with_z(&mut self, z: MatRef<'_, f32>, y: ColRef<'_, f32>) {
+        let n_samples = z.nrows();
+        let total_dim = z.ncols();
 
         // Initialize intercept in logit space based on target mean
         let mean_y = y.iter().sum::<f32>() / n_samples as f32;
-        let eps = 1e-6;
+        let eps = 1e-5;
         let p_clamped = mean_y.clamp(eps, 1.0 - eps);
         self.base_value = (p_clamped / (1.0 - p_clamped)).ln();
 
-        // Pre-compute Z matrix once
-        let mut z = Mat::<f32>::zeros(n_samples, total_dim);
-        z.as_mut()
-            .par_col_partition_mut(n_features)
-            .enumerate()
-            .for_each(|(f_idx, mut z_f): (usize, faer::MatMut<'_, f32>)| {
-                map.transform_feature_into(x, f_idx, z_f.as_mut());
-            });
-
         // Initialize coefficients
         let mut w = Col::<f32>::zeros(total_dim);
+
+        // Pre-allocate buffers for IRLS to minimize allocations in the loop
+        let mut r_val = Col::<f32>::zeros(n_samples);
+        let mut err = Col::<f32>::zeros(n_samples);
+        let mut z_w = Mat::<f32>::zeros(n_samples, total_dim);
 
         // IRLS Iteration
         for _ in 0..self.max_iter {
             let base_val = self.base_value;
 
             // Prediction in logit space: raw_pred = Z * w + base_value
-            let mut raw_pred = &z * &w;
+            let mut raw_pred = z * &w;
             for i in 0..n_samples {
                 raw_pred[i] += base_val;
             }
 
             // Compute probabilities, working weights, and errors
-            let mut r_val = Col::<f32>::zeros(n_samples);
-            let mut err = Col::<f32>::zeros(n_samples);
             for i in 0..n_samples {
                 let prob = Self::sigmoid(raw_pred[i]);
                 r_val[i] = (prob * (1.0 - prob)).max(1e-5);
@@ -117,14 +90,15 @@ impl Classifier {
             }
 
             // Hessian: H = Z^T * Diag(R) * Z
-            let mut z_w = z.clone();
+            // Optimized Hessian calculation by reusing pre-allocated z_w
             z_w.as_mut()
                 .par_row_partition_mut(n_samples)
                 .enumerate()
-                .for_each(|(i, mut row): (usize, faer::MatMut<'_, f32>)| {
+                .for_each(|(i, mut row): (usize, MatMut<'_, f32>)| {
                     let r = r_val[i];
+                    let z_row = z.row(i);
                     for j in 0..total_dim {
-                        row[(0, j)] *= r;
+                        row[(0, j)] = z_row[j] * r;
                     }
                 });
 
@@ -147,11 +121,14 @@ impl Classifier {
 
             // Convergence check based on the update magnitude
             let update_mag: f32 = delta_w.iter().map(|&x| x.abs()).sum();
-            if update_mag <= 1e-6 {
+            if update_mag <= 1e-5 {
                 break;
             }
             w += delta_w;
         }
+
+        let n_features = self.kernel_feature_map.as_ref().unwrap().num_features;
+        let n_bases = self.kernel_feature_map.as_ref().unwrap().num_bases;
 
         // De-stack the weight vector into per-feature coefficients
         self.coefficients = (0..n_features)
@@ -162,32 +139,27 @@ impl Classifier {
             .collect();
     }
 
-    /// Predicts class probabilities for the given input matrix X.
-    ///
-    /// Returns a vector of probabilities for the positive class (1).
-    pub fn predict(&self, x: MatRef<'_, f32>) -> Col<f32> {
-        let map = self.kernel_feature_map.as_ref().expect("Model not fitted");
-        let n_samples = x.nrows();
-        let n_features = map.num_features;
-        let n_bases = map.num_bases;
-        let total_dim = n_features * n_bases;
-
-        if n_features != x.ncols() {
-            panic!(
-                "Mismatched dimensions: The number of columns in the feature map ({}) must match the number of input columns ({}).",
-                n_features,
-                x.ncols()
-            );
+    /// Fits the binary classifier using the IRLS algorithm.
+    pub fn fit(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>, is_categorical: &[bool]) {
+        if self.kernel_feature_map.is_none() {
+            let mut map = KernelFeatureMap::new(self.max_bases);
+            map.fit(x, is_categorical);
+            self.kernel_feature_map = Some(Arc::new(map));
         }
 
-        // Transform features into the kernel space Z
-        let mut z = Mat::<f32>::zeros(n_samples, total_dim);
-        z.as_mut()
-            .par_col_partition_mut(n_features)
-            .enumerate()
-            .for_each(|(f_idx, mut z_f): (usize, faer::MatMut<'_, f32>)| {
-                map.transform_feature_into(x, f_idx, z_f.as_mut());
-            });
+        let map = self.kernel_feature_map.as_ref().unwrap();
+        let z = map.transform(x);
+
+        self.fit_with_z(z.as_ref(), y);
+    }
+
+    /// Predicts class probabilities using a pre-computed Z matrix.
+    pub fn predict_with_z(&self, z: MatRef<'_, f32>) -> Col<f32> {
+        let n_samples = z.nrows();
+        let total_dim = z.ncols();
+
+        let n_features = self.kernel_feature_map.as_ref().unwrap().num_features;
+        let n_bases = self.kernel_feature_map.as_ref().unwrap().num_bases;
 
         // Stack all coefficients into one big column
         let mut all_coeffs = Col::<f32>::zeros(total_dim);
@@ -205,6 +177,13 @@ impl Classifier {
         }
 
         prediction
+    }
+
+    /// Predicts class probabilities for the given input matrix X.
+    pub fn predict(&self, x: MatRef<'_, f32>) -> Col<f32> {
+        let map = self.kernel_feature_map.as_ref().expect("Model not fitted");
+        let z = map.transform(x);
+        self.predict_with_z(z.as_ref())
     }
 
     /// Explains the model's prediction by decomposing it into individual feature contributions.
@@ -230,7 +209,7 @@ impl Classifier {
             .as_mut()
             .par_col_partition_mut(n_features)
             .enumerate()
-            .for_each(|(f_idx, z_f): (usize, faer::MatMut<'_, f32>)| {
+            .for_each(|(f_idx, z_f): (usize, MatMut<'_, f32>)| {
                 let mut out_z = Mat::<f32>::zeros(n_samples, n_bases);
                 map.transform_feature_into(x, f_idx, out_z.as_mut());
                 let col_contrib = out_z * &self.coefficients[f_idx];

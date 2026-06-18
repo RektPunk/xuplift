@@ -47,11 +47,15 @@ impl PWLearner {
         map.fit(x, is_categorical);
         let shared_map = Arc::new(map);
 
+        // Pre-compute Z matrix once
+        let z = shared_map.transform(x);
+        let z_ref = z.as_ref();
+
         // Fit and predict propensity score model
         let mut p = Classifier::new(max_bases, p_penalty, p_max_iter);
         p.kernel_feature_map = Some(shared_map.clone());
-        p.fit(x, t, is_categorical);
-        let p_pred = p.predict(x);
+        p.fit_with_z(z_ref, t);
+        let p_pred = p.predict_with_z(z_ref);
 
         // Construct pseudo-outcomes in parallel
         // Y* = Y * [T / e(x) - (1-T) / (1-e(x))]
@@ -68,7 +72,8 @@ impl PWLearner {
         // Fit model on pseudo-outcomes
         let mut tau = Regressor::new(max_bases, tau_penalty);
         tau.kernel_feature_map = Some(shared_map.clone());
-        tau.fit(x, y_pw.as_ref(), is_categorical);
+        let w_all = Col::<f32>::full(num_rows, 1.0);
+        tau.fit_with_z(z_ref, y_pw.as_ref(), &w_all);
 
         Self { tau }
     }
