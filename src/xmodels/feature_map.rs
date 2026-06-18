@@ -50,12 +50,12 @@ impl KernelFeatureMap {
     }
 
     #[inline]
-    fn compute_categorical_kernel(diff: f32) -> f32 {
+    fn kernel_categorical(diff: f32) -> f32 {
         if diff.abs() < f32::EPSILON { 1.0 } else { 0.0 }
     }
 
     #[inline]
-    fn compute_continuous_kernel(diff: f32, s2_inv: f32) -> f32 {
+    fn kernel_continuous(diff: f32, s2_inv: f32) -> f32 {
         (-(diff * diff) * s2_inv).exp()
     }
 
@@ -161,7 +161,7 @@ impl KernelFeatureMap {
                     for b_i_idx in 0..self.num_bases {
                         for b_j_idx in b_i_idx..self.num_bases {
                             let diff = bases[b_i_idx] - bases[b_j_idx];
-                            k_mm[(b_i_idx, b_j_idx)] = Self::compute_categorical_kernel(diff);
+                            k_mm[(b_i_idx, b_j_idx)] = Self::kernel_categorical(diff);
 
                             // Symmetric: k_ij = k_ji
                             if b_i_idx != b_j_idx {
@@ -173,8 +173,7 @@ impl KernelFeatureMap {
                     for b_i_idx in 0..self.num_bases {
                         for b_j_idx in b_i_idx..self.num_bases {
                             let diff = bases[b_i_idx] - bases[b_j_idx];
-                            k_mm[(b_i_idx, b_j_idx)] =
-                                Self::compute_continuous_kernel(diff, s2_inv);
+                            k_mm[(b_i_idx, b_j_idx)] = Self::kernel_continuous(diff, s2_inv);
 
                             // Symmetric: k_ij = k_ji
                             if b_i_idx != b_j_idx {
@@ -212,7 +211,7 @@ impl KernelFeatureMap {
                         if !x_val.is_nan() {
                             for b_idx in 0..self.num_bases {
                                 let diff = x_val - bases[b_idx];
-                                k_col_sums[b_idx] += Self::compute_categorical_kernel(diff);
+                                k_col_sums[b_idx] += Self::kernel_categorical(diff);
                             }
                         }
                     }
@@ -222,7 +221,7 @@ impl KernelFeatureMap {
                         if !x_val.is_nan() {
                             for b_idx in 0..self.num_bases {
                                 let diff = x_val - bases[b_idx];
-                                k_col_sums[b_idx] += Self::compute_continuous_kernel(diff, s2_inv);
+                                k_col_sums[b_idx] += Self::kernel_continuous(diff, s2_inv);
                             }
                         }
                     }
@@ -279,12 +278,12 @@ impl KernelFeatureMap {
             if is_categorical_f {
                 for b_idx in 0..self.num_bases {
                     let diff = x_val - bases[b_idx];
-                    kernel_cache[b_idx] = Self::compute_categorical_kernel(diff);
+                    kernel_cache[b_idx] = Self::kernel_categorical(diff);
                 }
             } else {
                 for b_idx in 0..self.num_bases {
                     let diff = x_val - bases[b_idx];
-                    kernel_cache[b_idx] = Self::compute_continuous_kernel(diff, s2_inv);
+                    kernel_cache[b_idx] = Self::kernel_continuous(diff, s2_inv);
                 }
             }
 
@@ -327,7 +326,7 @@ impl KernelFeatureMap {
                 if !x_val.is_nan() {
                     for b_idx in 0..self.num_bases {
                         let diff = x_val - bases[b_idx];
-                        k_f[(r_idx, b_idx)] = Self::compute_categorical_kernel(diff);
+                        k_f[(r_idx, b_idx)] = Self::kernel_categorical(diff);
                     }
                 }
             }
@@ -337,7 +336,7 @@ impl KernelFeatureMap {
                 if !x_val.is_nan() {
                     for b_idx in 0..self.num_bases {
                         let diff = x_val - bases[b_idx];
-                        k_f[(r_idx, b_idx)] = Self::compute_continuous_kernel(diff, s2_inv);
+                        k_f[(r_idx, b_idx)] = Self::kernel_continuous(diff, s2_inv);
                     }
                 }
             }
