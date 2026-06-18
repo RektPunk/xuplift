@@ -142,7 +142,7 @@ impl Regressor {
 
     /// Predicts target values using a pre-computed Z matrix.
     ///
-    /// Accepts a pre-transformed feature matrix $Z$, bypassing the expensive kernel transformation.
+    /// The prediction is: $\hat{y} = Z \alpha + b = \sum_{j} (Z_j \alpha_j) + b$.
     pub fn predict_with_z(&self, z: MatRef<'_, f32>) -> Col<f32> {
         let n_samples = z.nrows();
         let total_dim = z.ncols();
@@ -169,8 +169,6 @@ impl Regressor {
     }
 
     /// Predicts target values for the given feature matrix X.
-    ///
-    /// The prediction is: $\hat{y} = Z \alpha + b = \sum_{j} (Z_j \alpha_j) + b$.
     pub fn predict(&self, x: MatRef<'_, f32>) -> Col<f32> {
         let map = self.kernel_feature_map.as_ref().expect("Model not fitted");
         let z = map.transform(x);
@@ -180,7 +178,7 @@ impl Regressor {
     /// Explains the model's prediction by decomposing it into individual feature contributions.
     ///
     /// For each feature $i$, it calculates the contribution $C_i = Z_i \cdot \alpha_i$,
-    /// such that $\sum C_i + b = \hat{y}$.
+    /// resulting in a matrix where each column represents the contribution of a specific feature.
     pub fn explain(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         let map = self.kernel_feature_map.as_ref().expect("Model not fitted");
         let n_samples = x.nrows();

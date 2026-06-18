@@ -13,7 +13,6 @@ use crate::xmodels::feature_map::KernelFeatureMap;
 /// $$P(y=1|z) = \sigma(z^T w + b)$$
 /// where $\sigma(x) = \frac{1}{1 + e^{-x}}$ is the sigmoid function,
 /// $w$ are the coefficients, and $b$ is the intercept.
-///
 /// The model is fitted using the IRLS algorithm, which iteratively updates weights $w$:
 /// $w_{new} = w_{old} + (Z^T R Z + \lambda I)^{-1} Z^T (y - \mu)$
 /// where $R$ is a diagonal matrix with $R_{ii} = \mu_i (1 - \mu_i)$.
@@ -181,8 +180,6 @@ impl Classifier {
     }
 
     /// Predicts class probabilities for the given input matrix X.
-    ///
-    /// Returns a vector of probabilities for the positive class (1).
     pub fn predict(&self, x: MatRef<'_, f32>) -> Col<f32> {
         let map = self.kernel_feature_map.as_ref().expect("Model not fitted");
         let z = map.transform(x);

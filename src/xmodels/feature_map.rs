@@ -36,7 +36,6 @@ pub struct KernelFeatureMap {
 }
 
 impl KernelFeatureMap {
-    /// Returns a new KernelFeatureMap instance
     pub fn new(max_bases: usize) -> Self {
         Self {
             num_features: 0,
@@ -246,58 +245,6 @@ impl KernelFeatureMap {
         }
     }
 
-    /// Transforms an entire row into the joint kernel feature space by concatenating all mapped features.
-    ///
-    /// For a given row index and input matrix $x$, it computes the mapped feature for each feature $f$ and projection component $p$,
-    /// and stores it at the corresponding layout offset $f \cdot m + p$:
-    /// $$\text{out}[f \cdot m + p] = \left( \sum_{b=1}^m k(x_f, u_{f, b}) P_{f, bp} \right) - \mu_{f, p}$$
-    /// where $m$ is `num_bases`, $k$ is the RBF kernel, $P_f$ is the projection matrix, and $\mu_f$ is the centering mean.
-    pub fn transform_row_into(&self, x: MatRef<'_, f32>, r_idx: usize, mut out: ColMut<'_, f32>) {
-        // Temporary buffer on the stack to store intermediate kernel calculations
-        // Capped at MAX_BASES as per the Nystrom landmark selection logic
-        let mut kernel_cache = vec![0.0f32; self.num_bases];
-        for f_idx in 0..self.num_features {
-            let x_val = x[(r_idx, f_idx)];
-            let offset = f_idx * self.num_bases;
-
-            // Handle missing values
-            if x_val.is_nan() {
-                for p_idx in 0..self.num_bases {
-                    out[offset + p_idx] = 0.0;
-                }
-                continue;
-            }
-
-            let bases = &self.feature_bases[f_idx];
-            let proj = &self.proj_matrices[f_idx];
-            let mean = &self.feature_means[f_idx];
-            let s2_inv = self.s2_invs[f_idx];
-            let is_categorical_f = self.is_categorical[f_idx];
-
-            // Pre-calculate RBF kernel distances between input and landmarks
-            if is_categorical_f {
-                for b_idx in 0..self.num_bases {
-                    let diff = x_val - bases[b_idx];
-                    kernel_cache[b_idx] = Self::kernel_categorical(diff);
-                }
-            } else {
-                for b_idx in 0..self.num_bases {
-                    let diff = x_val - bases[b_idx];
-                    kernel_cache[b_idx] = Self::kernel_continuous(diff, s2_inv);
-                }
-            }
-
-            // Map into the learned Nystrom feature space via linear projection and centering
-            for p_idx in 0..self.num_bases {
-                let mut projection_sum = 0.0;
-                for b_idx in 0..self.num_bases {
-                    projection_sum += kernel_cache[b_idx] * proj[(b_idx, p_idx)];
-                }
-                out[offset + p_idx] = projection_sum - mean[p_idx];
-            }
-        }
-    }
-
     /// Transforms a specific feature column across all rows into its Nystrom kernel feature space.
     ///
     /// For a given feature index $f$ and input matrix $x$, it computes the mapped feature
@@ -357,7 +304,6 @@ impl KernelFeatureMap {
     /// Transforms the input matrix X into the joint Nystrom kernel feature space Z.
     ///
     /// The resulting matrix $Z$ has dimensions (n_samples x (num_features * num_bases)).
-    /// This method is optimized using parallel processing across features.
     pub fn transform(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         let n_samples = x.nrows();
         let total_dim = self.num_features * self.num_bases;
