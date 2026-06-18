@@ -189,11 +189,7 @@ impl KernelFeatureMap {
 
                 for p_idx in 0..self.num_bases {
                     let val = eig.S()[p_idx];
-                    let inv_sqrt_s = if val > f32::EPSILON {
-                        1.0 / val.sqrt()
-                    } else {
-                        0.0
-                    };
+                    let inv_sqrt_s = if val > 1e-5 { 1.0 / val.sqrt() } else { 0.0 };
                     // Efficiently scale each column by the inverse square root of eigenvalues
                     for b_idx in 0..self.num_bases {
                         proj_matrix[(b_idx, p_idx)] *= inv_sqrt_s;
