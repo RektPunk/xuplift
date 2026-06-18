@@ -1,4 +1,4 @@
-use faer::{Col, ColMut, Mat, MatMut, MatRef};
+use faer::{Col, Mat, MatMut, MatRef};
 use rand::rng;
 use rand::seq::SliceRandom;
 use rayon::prelude::*;

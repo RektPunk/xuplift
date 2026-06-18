@@ -47,6 +47,10 @@ impl TLearner {
         map.fit(x, is_categorical);
         let shared_map = Arc::new(map);
 
+        // Pre-compute Z matrix once
+        let z = shared_map.transform(x);
+        let z_ref = z.as_ref();
+
         // Create weights for T=1 and T=0
         // Use weighted fitting for stability and to avoid explicit data slicing
         let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
@@ -57,13 +61,13 @@ impl TLearner {
             || {
                 let mut mu_t1 = Regressor::new(max_bases, mu_penalty);
                 mu_t1.kernel_feature_map = Some(shared_map.clone());
-                mu_t1.fit_weighted(x, y, &w_t1, is_categorical);
+                mu_t1.fit_with_z(z_ref, y, &w_t1);
                 mu_t1
             },
             || {
                 let mut mu_t0 = Regressor::new(max_bases, mu_penalty);
                 mu_t0.kernel_feature_map = Some(shared_map.clone());
-                mu_t0.fit_weighted(x, y, &w_t0, is_categorical);
+                mu_t0.fit_with_z(z_ref, y, &w_t0);
                 mu_t0
             },
         );

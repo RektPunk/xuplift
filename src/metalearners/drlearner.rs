@@ -53,6 +53,10 @@ impl DRLearner {
         map.fit(x, is_categorical);
         let shared_map = Arc::new(map);
 
+        // Pre-compute Z matrix once
+        let z = shared_map.transform(x);
+        let z_ref = z.as_ref();
+
         // Create weights for T=1 and T=0
         let w_t1 = Col::<f32>::from_fn(num_rows, |i| if t[i] > 0.5 { 1.0 } else { 0.0 });
         let w_t0 = Col::<f32>::from_fn(num_rows, |i| if t[i] <= 0.5 { 1.0 } else { 0.0 });
@@ -64,22 +68,22 @@ impl DRLearner {
                     || {
                         let mut mu_t1 = Regressor::new(max_bases, mu_penalty);
                         mu_t1.kernel_feature_map = Some(shared_map.clone());
-                        mu_t1.fit_weighted(x, y, &w_t1, is_categorical);
-                        mu_t1.predict(x)
+                        mu_t1.fit_with_z(z_ref, y, &w_t1);
+                        mu_t1.predict_with_z(z_ref)
                     },
                     || {
                         let mut mu_t0 = Regressor::new(max_bases, mu_penalty);
                         mu_t0.kernel_feature_map = Some(shared_map.clone());
-                        mu_t0.fit_weighted(x, y, &w_t0, is_categorical);
-                        mu_t0.predict(x)
+                        mu_t0.fit_with_z(z_ref, y, &w_t0);
+                        mu_t0.predict_with_z(z_ref)
                     },
                 )
             },
             || {
                 let mut p = Classifier::new(max_bases, p_penalty, p_max_iter);
                 p.kernel_feature_map = Some(shared_map.clone());
-                p.fit(x, t, is_categorical);
-                p.predict(x)
+                p.fit_with_z(z_ref, t);
+                p.predict_with_z(z_ref)
             },
         );
 
@@ -100,7 +104,8 @@ impl DRLearner {
         // Fit model on pseudo-outcomes
         let mut tau = Regressor::new(max_bases, tau_penalty);
         tau.kernel_feature_map = Some(shared_map.clone());
-        tau.fit(x, y_dr.as_ref(), is_categorical);
+        let w_all = Col::<f32>::full(num_rows, 1.0);
+        tau.fit_with_z(z_ref, y_dr.as_ref(), &w_all);
 
         Self { tau }
     }

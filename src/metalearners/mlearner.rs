@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use faer::{Col, ColRef, Mat, MatRef};
 
+use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
 /// M-Learner (Modified Covariates Learner) for Uplift Modeling.
@@ -34,6 +37,15 @@ impl MLearner {
     ) -> Self {
         let num_rows = x.nrows();
 
+        // Fit KernelFeatureMap once and share it
+        let mut map = KernelFeatureMap::new(max_bases);
+        map.fit(x, is_categorical);
+        let shared_map = Arc::new(map);
+
+        // Pre-compute Z matrix once
+        let z = shared_map.transform(x);
+        let z_ref = z.as_ref();
+
         // Target Transformation: Y* = 2 * Y * (2T - 1)
         let y_m = Col::from_fn(num_rows, |i| {
             let sign = if t[i] > 0.5 { 1.0 } else { -1.0 };
@@ -42,7 +54,9 @@ impl MLearner {
 
         // Fit Regressor on pseudo-outcomes
         let mut tau = Regressor::new(max_bases, tau_penalty);
-        tau.fit(x, y_m.as_ref(), is_categorical);
+        tau.kernel_feature_map = Some(shared_map.clone());
+        let w_all = Col::<f32>::full(num_rows, 1.0);
+        tau.fit_with_z(z_ref, y_m.as_ref(), &w_all);
 
         Self { tau }
     }
