@@ -54,12 +54,32 @@ impl Classifier {
     /// This method uses target centering (y - mean) to align with the Regressor's logic.
     /// The `base_value` serves as the learned intercept, eliminating the need for an explicit bias column:
     /// $w_{new} = w_{old} + (Z^T R Z + \lambda I)^{-1} Z^T (y - \mu)$
-    pub fn fit_with_z(&mut self, z: MatRef<'_, f32>, y: ColRef<'_, f32>) {
+    pub fn fit_with_z(&mut self, z: MatRef<'_, f32>, y: ColRef<'_, f32>, weights: &Col<f32>) {
         let n_samples = z.nrows();
         let total_dim = z.ncols();
 
+        if n_samples != y.nrows() || n_samples != weights.nrows() {
+            panic!(
+                "Mismatched dimensions: Z ({} rows), y ({} rows), weights ({} rows).",
+                n_samples,
+                y.nrows(),
+                weights.nrows()
+            );
+        }
+
         // Initialize intercept in logit space based on target mean
-        let mean_y = y.iter().sum::<f32>() / n_samples as f32;
+        let total_weight: f32 = weights.iter().sum();
+        let mean_y = if total_weight > 1e-5 {
+            weights
+                .iter()
+                .zip(y.iter())
+                .map(|(&w, &yi)| w * yi)
+                .sum::<f32>()
+                / total_weight
+        } else {
+            y.iter().sum::<f32>() / n_samples as f32
+        };
+
         let eps = 1e-5;
         let p_clamped = mean_y.clamp(eps, 1.0 - eps);
         self.base_value = (p_clamped / (1.0 - p_clamped)).ln();
@@ -85,8 +105,9 @@ impl Classifier {
             // Compute probabilities, working weights, and errors
             for i in 0..n_samples {
                 let prob = Self::sigmoid(raw_pred[i]);
-                r_val[i] = (prob * (1.0 - prob)).max(1e-5);
-                err[i] = y[i] - prob;
+                let weight = weights[i];
+                r_val[i] = weight * (prob * (1.0 - prob)).max(1e-5);
+                err[i] = weight * (y[i] - prob);
             }
 
             // Hessian: H = Z^T * Diag(R) * Z
@@ -139,8 +160,14 @@ impl Classifier {
             .collect();
     }
 
-    /// Fits the binary classifier using the IRLS algorithm.
-    pub fn fit(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>, is_categorical: &[bool]) {
+    /// Fits the classifier using Weighted IRLS.
+    pub fn fit_weighted(
+        &mut self,
+        x: MatRef<'_, f32>,
+        y: ColRef<'_, f32>,
+        weights: &Col<f32>,
+        is_categorical: &[bool],
+    ) {
         if self.kernel_feature_map.is_none() {
             let mut map = KernelFeatureMap::new(self.max_bases);
             map.fit(x, is_categorical);
@@ -150,7 +177,13 @@ impl Classifier {
         let map = self.kernel_feature_map.as_ref().unwrap();
         let z = map.transform(x);
 
-        self.fit_with_z(z.as_ref(), y);
+        self.fit_with_z(z.as_ref(), y, weights);
+    }
+
+    /// Fits the binary classifier using the IRLS algorithm.
+    pub fn fit(&mut self, x: MatRef<'_, f32>, y: ColRef<'_, f32>, is_categorical: &[bool]) {
+        let weights = Col::<f32>::full(x.nrows(), 1.0);
+        self.fit_weighted(x, y, &weights, is_categorical);
     }
 
     /// Predicts class probabilities using a pre-computed Z matrix.
