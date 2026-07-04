@@ -12,13 +12,13 @@ use crate::xmodels::regressor::Regressor;
 ///
 /// # Reference
 /// * Tian, L., Alizadeh, A. A., Gentles, A. J., & Tibshirani, R. (2014). A simple method for estimating interactions between a treatment and a large number of covariates. Journal of the American Statistical Association, 109(508), 1517–1532. https://doi.org/10.1080/01621459.2014.951443
-pub struct MLearner {
+pub struct MRegressor {
     /// Treatment effect model
     pub tau: Regressor,
 }
 
-impl MLearner {
-    /// Initializes and fits the MLearner using the provided data.
+impl MRegressor {
+    /// Initializes and fits the MRegressor using the provided data.
     ///
     /// # Arguments
     /// * `x` - Feature matrix (n_samples x n_features).
