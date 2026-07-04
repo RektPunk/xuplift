@@ -5,7 +5,7 @@ use faer::{Col, ColRef, Mat, MatRef};
 use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
-/// M-Learner (Modified Covariates Learner) for Uplift Modeling.
+/// Modified Covariates Regressor for Uplift Modeling.
 ///
 /// This learner transforms the target variable to isolate the causal effect in one step,
 /// assuming a randomized controlled trial (RCT) environment where the propensity score is 0.5.

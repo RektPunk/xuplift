@@ -6,7 +6,7 @@ use crate::xmodels::classifier::Classifier;
 use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
-/// Propensity Score Weighted Learner (PW-Learner) for Uplift Modeling.
+/// Propensity Score Weighted Regressor for Uplift Modeling.
 ///
 /// This learner uses inverse probability weighting (IPW) to transform the target variable,
 /// correcting for confounding bias using only a propensity score model.
