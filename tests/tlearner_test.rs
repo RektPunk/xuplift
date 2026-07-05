@@ -1,9 +1,9 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::tlearner::TLearner;
+use xuplift::metalearners::tlearner::TRegressor;
 
 #[test]
-fn test_tlearner() {
+fn test_tregressor() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -34,7 +34,7 @@ fn test_tlearner() {
 
     // --- Model Initialization ---
     let is_categorical = vec![false; n_features];
-    let tlearner = TLearner::new(
+    let tregressor = TRegressor::new(
         x.as_ref(),
         t.as_ref(),
         y.as_ref(),
@@ -44,7 +44,7 @@ fn test_tlearner() {
     );
 
     // --- Prediction ---
-    let uplift_estimate = tlearner.predict_uplift(x.as_ref());
+    let uplift_estimate = tregressor.predict_uplift(x.as_ref());
 
     // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
@@ -66,7 +66,7 @@ fn test_tlearner() {
 
     // --- Verification: Explanation Consistency ---
     // In T-Learner, the explanation is the difference between two models' contributions.
-    let uplift_explanation = tlearner.explain_uplift(x.as_ref());
+    let uplift_explanation = tregressor.explain_uplift(x.as_ref());
 
     // T-Learner's explanation matrix should have n_features columns.
     assert_eq!(uplift_explanation.ncols(), n_features);
@@ -78,7 +78,7 @@ fn test_tlearner() {
         }
 
         // Reconstructed Uplift = sum(feature_contributions) + delta_base_values
-        let base_value_diff = tlearner.mu_t1.base_value - tlearner.mu_t0.base_value;
+        let base_value_diff = tregressor.mu_t1.base_value - tregressor.mu_t0.base_value;
         let total_reconstructed_uplift = explained_total + base_value_diff;
         assert!(
             (total_reconstructed_uplift - uplift_estimate[r_idx]).abs() < 1e-4,
@@ -88,5 +88,5 @@ fn test_tlearner() {
             uplift_estimate[r_idx]
         );
     }
-    println!("TLearner verification passed!");
+    println!("TRegressor verification passed!");
 }

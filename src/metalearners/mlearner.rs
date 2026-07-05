@@ -7,9 +7,6 @@ use crate::xmodels::regressor::Regressor;
 
 /// Modified Covariates Regressor for Uplift Modeling.
 ///
-/// This learner transforms the target variable to isolate the causal effect in one step,
-/// assuming a randomized controlled trial (RCT) environment where the propensity score is 0.5.
-///
 /// # Reference
 /// * Tian, L., Alizadeh, A. A., Gentles, A. J., & Tibshirani, R. (2014). A simple method for estimating interactions between a treatment and a large number of covariates. Journal of the American Statistical Association, 109(508), 1517–1532. https://doi.org/10.1080/01621459.2014.951443
 pub struct MRegressor {

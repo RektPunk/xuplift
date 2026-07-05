@@ -1,9 +1,9 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::slearner::SLearner;
+use xuplift::metalearners::slearner::SRegressor;
 
 #[test]
-fn test_slearner() {
+fn test_sregressor() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -32,7 +32,7 @@ fn test_slearner() {
 
     // --- Model Initialization ---
     let is_categorical = vec![false; n_features + 1];
-    let slearner = SLearner::new(
+    let sregressor = SRegressor::new(
         x.as_ref(),
         t.as_ref(),
         y.as_ref(),
@@ -42,7 +42,7 @@ fn test_slearner() {
     );
 
     // --- Prediction ---
-    let uplift_estimate = slearner.predict_uplift(x.as_ref());
+    let uplift_estimate = sregressor.predict_uplift(x.as_ref());
 
     // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
@@ -63,9 +63,9 @@ fn test_slearner() {
     );
 
     // --- Verification: Explanation Consistency ---
-    let uplift_explanation = slearner.explain_uplift(x.as_ref());
+    let uplift_explanation = sregressor.explain_uplift(x.as_ref());
 
-    // S-Learner's explanation matrix should have n_features + 1 columns (X + T).
+    // SRegressor's explanation matrix should have n_features + 1 columns (X + T).
     assert_eq!(uplift_explanation.ncols(), n_features + 1);
 
     for r_idx in 0..x.nrows() {
@@ -74,7 +74,7 @@ fn test_slearner() {
             explained_total += uplift_explanation[(r_idx, p_idx)];
         }
 
-        // For S-Learner, sum(contributions) should equal the predicted uplift.
+        // For SRegressor, sum(contributions) should equal the predicted uplift.
         assert!(
             (explained_total - uplift_estimate[r_idx]).abs() < 1e-4,
             "Uplift explanation delta mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
@@ -83,5 +83,5 @@ fn test_slearner() {
             uplift_estimate[r_idx]
         );
     }
-    println!("SLearner verification passed!");
+    println!("SRegressor verification passed!");
 }

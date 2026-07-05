@@ -14,11 +14,26 @@ class Classifier(XModel):
 class Regressor(XModel):
     def __init__(self, max_bases: int, penalty: float) -> None: ...
 
-class Learner:
+class MetaLearner:
     def predict_uplift(self, x: NDArray[np.float32]) -> NDArray[np.float32]: ...
     def explain_uplift(self, x: NDArray[np.float32]) -> NDArray[np.float32]: ...
 
-class DRLearner(Learner):
+class DRClassifier(MetaLearner):
+    def __init__(
+        self,
+        x: NDArray[np.float32],
+        t: NDArray[np.float32],
+        y: NDArray[np.float32],
+        is_categorical: list[bool],
+        max_bases: int,
+        mu_penalty: float,
+        mu_max_iter: int,
+        p_penalty: float,
+        p_max_iter: int,
+        tau_penalty: float,
+    ) -> None: ...
+
+class DRRegressor(MetaLearner):
     def __init__(
         self,
         x: NDArray[np.float32],
@@ -32,7 +47,21 @@ class DRLearner(Learner):
         tau_penalty: float,
     ) -> None: ...
 
-class GRLearner(Learner):
+class GRClassifier(MetaLearner):
+    def __init__(
+        self,
+        x: NDArray[np.float32],
+        t: NDArray[np.float32],
+        y: NDArray[np.float32],
+        is_categorical: list[bool],
+        max_bases: int,
+        mu_penalty: float,
+        mu_max_iter: int,
+        p_penalty: float,
+        tau_penalty: float,
+    ) -> None: ...
+
+class GRRegressor(MetaLearner):
     def __init__(
         self,
         x: NDArray[np.float32],
@@ -45,7 +74,7 @@ class GRLearner(Learner):
         tau_penalty: float,
     ) -> None: ...
 
-class MLearner(Learner):
+class MRegressor(MetaLearner):
     def __init__(
         self,
         x: NDArray[np.float32],
@@ -56,7 +85,7 @@ class MLearner(Learner):
         tau_penalty: float,
     ) -> None: ...
 
-class PWLearner(Learner):
+class PWRegressor(MetaLearner):
     def __init__(
         self,
         x: NDArray[np.float32],
@@ -69,7 +98,7 @@ class PWLearner(Learner):
         tau_penalty: float,
     ) -> None: ...
 
-class RLearner(Learner):
+class RClassifier(MetaLearner):
     def __init__(
         self,
         x: NDArray[np.float32],
@@ -83,7 +112,33 @@ class RLearner(Learner):
         tau_penalty: float,
     ) -> None: ...
 
-class SLearner(Learner):
+class RRegressor(MetaLearner):
+    def __init__(
+        self,
+        x: NDArray[np.float32],
+        t: NDArray[np.float32],
+        y: NDArray[np.float32],
+        is_categorical: list[bool],
+        max_bases: int,
+        mu_penalty: float,
+        p_penalty: float,
+        p_max_iter: int,
+        tau_penalty: float,
+    ) -> None: ...
+
+class SClassifier(MetaLearner):
+    def __init__(
+        self,
+        x: NDArray[np.float32],
+        t: NDArray[np.float32],
+        y: NDArray[np.float32],
+        is_categorical: list[bool],
+        max_bases: int,
+        mu_penalty: float,
+        mu_max_iter: int,
+    ) -> None: ...
+
+class SRegressor(MetaLearner):
     def __init__(
         self,
         x: NDArray[np.float32],
@@ -94,7 +149,19 @@ class SLearner(Learner):
         mu_penalty: float,
     ) -> None: ...
 
-class TLearner(Learner):
+class TClassifier(MetaLearner):
+    def __init__(
+        self,
+        x: NDArray[np.float32],
+        t: NDArray[np.float32],
+        y: NDArray[np.float32],
+        is_categorical: list[bool],
+        max_bases: int,
+        mu_penalty: float,
+        mu_max_iter: int,
+    ) -> None: ...
+
+class TRegressor(MetaLearner):
     def __init__(
         self,
         x: NDArray[np.float32],
@@ -105,7 +172,22 @@ class TLearner(Learner):
         mu_penalty: float,
     ) -> None: ...
 
-class XLearner(Learner):
+class XClassifier(MetaLearner):
+    def __init__(
+        self,
+        x: NDArray[np.float32],
+        t: NDArray[np.float32],
+        y: NDArray[np.float32],
+        is_categorical: list[bool],
+        max_bases: int,
+        mu_penalty: float,
+        mu_max_iter: int,
+        p_penalty: float,
+        p_max_iter: int,
+        tau_penalty: float,
+    ) -> None: ...
+
+class XRegressor(MetaLearner):
     def __init__(
         self,
         x: NDArray[np.float32],

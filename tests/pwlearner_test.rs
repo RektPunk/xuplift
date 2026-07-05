@@ -1,9 +1,9 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::pwlearner::PWLearner;
+use xuplift::metalearners::pwlearner::PWRegressor;
 
 #[test]
-fn test_pwlearner() {
+fn test_pwregressor() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -31,9 +31,9 @@ fn test_pwlearner() {
     }
 
     // --- Model Initialization ---
-    // PWLearner fits a propensity classifier and fits a tau model on the pseudo-outcomes.
+    // PWRegressor fits a propensity classifier and fits a tau model on the pseudo-outcomes.
     let is_categorical = vec![false; n_features];
-    let pwlearner = PWLearner::new(
+    let pwregressor = PWRegressor::new(
         x.as_ref(),
         t.as_ref(),
         y.as_ref(),
@@ -45,7 +45,7 @@ fn test_pwlearner() {
     );
 
     // --- Prediction ---
-    let uplift_estimate = pwlearner.predict_uplift(x.as_ref());
+    let uplift_estimate = pwregressor.predict_uplift(x.as_ref());
 
     // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
@@ -55,7 +55,7 @@ fn test_pwlearner() {
     let avg_uplift = sum_uplift / n_samples as f32;
 
     println!(
-        "True Uplift: 5.0, PW-Learner Estimated Average Uplift: {:.4}",
+        "True Uplift: 5.0, PWRegressor Estimated Average Uplift: {:.4}",
         avg_uplift
     );
 
@@ -66,13 +66,13 @@ fn test_pwlearner() {
     );
 
     // --- Verification: Explanation Consistency ---
-    // In PW-Learner, the explanation is straightforward because it uses a tau regressor.
-    let uplift_explanation = pwlearner.explain_uplift(x.as_ref());
+    // In PWRegressor, the explanation is straightforward because it uses a tau regressor.
+    let uplift_explanation = pwregressor.explain_uplift(x.as_ref());
 
-    // PW-Learner's explanation matrix should have n_features columns.
+    // PWRegressor's explanation matrix should have n_features columns.
     assert_eq!(uplift_explanation.ncols(), n_features);
 
-    let base_value = pwlearner.tau.base_value;
+    let base_value = pwregressor.tau.base_value;
     for r_idx in 0..x.nrows() {
         let mut explained_total = 0.0;
         for p_idx in 0..uplift_explanation.ncols() {

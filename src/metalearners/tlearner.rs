@@ -6,13 +6,7 @@ use crate::xmodels::classifier::Classifier;
 use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
-/// T-Learner (Two-Learner) for Uplift Modeling.
-///
-/// This learner splits the data by treatment assignment and fits two independent models:
-/// $$\mu_1(x) = E[Y | X=x, T=1]$$
-/// $$\mu_0(x) = E[Y | X=x, T=0]$$
-/// The uplift is estimated as:
-/// $$\tau(x) = \mu_1(x) - \mu_0(x)$$
+/// Two Classifier for Uplift Modeling.
 ///
 /// # Reference
 /// * Künzel, S. R., Sekhon, J. S., Bickel, P. J., & Yu, B. (2019). Metalearners for estimating heterogeneous treatment effects using machine learning. Proceedings of the National Academy of Sciences, 116(10), 4156–4165. https://doi.org/10.1073/pnas.1804597116
@@ -91,7 +85,7 @@ impl TClassifier {
     }
 }
 
-/// T-Learner Regressor (Two-Learner) for Uplift Modeling.
+/// Two Regressor for Uplift Modeling.
 pub struct TRegressor {
     /// Regressor fitted exclusively on the treatment group (T=1).
     pub mu_t1: Regressor,

@@ -3,12 +3,7 @@ use faer::{Col, ColRef, Mat, MatRef};
 use crate::xmodels::classifier::Classifier;
 use crate::xmodels::regressor::Regressor;
 
-/// S-Learner (Single Learner) for Uplift Modeling.
-///
-/// This learner treats the treatment assignment $T$ as an additional feature in a response surface model:
-/// $$\mu(x, t) = E[Y | X=x, T=t]$$
-/// The uplift is estimated as:
-/// $$\tau(x) = \mu(x, 1) - \mu(x, 0)$$
+/// Single Classifier for Uplift Modeling.
 ///
 /// # Reference
 /// * Künzel, S. R., Sekhon, J. S., Bickel, P. J., & Yu, B. (2019). Metalearners for estimating heterogeneous treatment effects using machine learning. Proceedings of the National Academy of Sciences, 116(10), 4156–4165. https://doi.org/10.1073/pnas.1804597116
@@ -102,7 +97,7 @@ impl SClassifier {
     }
 }
 
-/// S-Learner Regressor(Single Learner) for Uplift Modeling.
+/// Single Regressor for Uplift Modeling.
 pub struct SRegressor {
     /// Regressor fitted on combined features (X, T).
     pub mu: Regressor,

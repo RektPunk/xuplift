@@ -6,14 +6,7 @@ use crate::xmodels::classifier::Classifier;
 use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
-/// Doubly Robust (DR) Classifier for Uplift Modeling.
-///
-/// This learner uses a multi-stage process with a doubly robust score wrapper:
-/// 1. Fit baseline outcome models $\mu_1(x)$ and $\mu_0(x)$ on treatment/control groups.
-/// 2. Fit a propensity model $e(x) = E[T|X]$ to estimate treatment assignment probabilities.
-/// 3. Construct a doubly robust pseudo-outcome ($Y_{dr}$):
-///    $$Y_{dr} = \mu_1(x) - \mu_0(x) + \frac{T(Y - \mu_1(x))}{e(x)} - \frac{(1 - T)(Y - \mu_0(x))}{1 - e(x)}$$
-/// 4. Fit a model $\tau(x)$ on the full feature matrix to predict $Y_{dr}$.
+/// Doubly Robust Classifier for Uplift Modeling.
 ///
 /// # Reference
 /// * Kennedy, E. H. (2023). Towards optimal doubly robust estimation of heterogeneous causal effects. Electronic Journal of Statistics, 17(2), 3008–3049. https://doi.org/10.1214/23-EJS2157
@@ -93,8 +86,8 @@ impl DRClassifier {
         // Construct pseudo-outcomes
         let y_dr = Col::<f32>::from_fn(num_rows, |i| {
             let gi = p_pred[i].clamp(0.01, 0.99);
-            let mu_t1_i = mu_t1_pred[i];
-            let mu_t0_i = mu_t0_pred[i];
+            let mu_t1_i = mu_t1_pred[i].clamp(0.01, 0.99);
+            let mu_t0_i = mu_t0_pred[i].clamp(0.01, 0.99);
 
             let base_effect = mu_t1_i - mu_t0_i;
             if t[i] > 0.5 {
@@ -123,7 +116,7 @@ impl DRClassifier {
     }
 }
 
-/// Doubly Robust (DR) Regressor for Uplift Modeling.
+/// Doubly Robust Regressor for Uplift Modeling.
 pub struct DRRegressor {
     /// Treatment effect model
     pub tau: Regressor,

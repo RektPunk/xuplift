@@ -8,9 +8,6 @@ use crate::xmodels::regressor::Regressor;
 
 /// Propensity Score Weighted Regressor for Uplift Modeling.
 ///
-/// This learner uses inverse probability weighting (IPW) to transform the target variable,
-/// correcting for confounding bias using only a propensity score model.
-///
 /// # Reference
 /// * Robins, J. M., Hernán, M. Á., & Brumback, B. (2000). Marginal structural models and causal inference in epidemiology. Epidemiology, 11(5), 550–560. https://doi.org/10.1097/00001648-200009000-00011
 pub struct PWRegressor {

@@ -1,9 +1,9 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::xlearner::XLearner;
+use xuplift::metalearners::xlearner::XRegressor;
 
 #[test]
-fn test_xlearner() {
+fn test_xregressor() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -34,10 +34,10 @@ fn test_xlearner() {
     }
 
     // --- Model Initialization ---
-    // X-Learner fits 5 models:
+    // XRegressor fits 5 models:
     // Stage 1: mu_1, mu_0 | Stage 2: tau_1, tau_0 | Stage 3: p (propensity)
     let is_categorical = vec![false; n_features];
-    let xlearner = XLearner::new(
+    let xregressor = XRegressor::new(
         x.as_ref(),
         t.as_ref(),
         y.as_ref(),
@@ -50,7 +50,7 @@ fn test_xlearner() {
     );
 
     // --- Prediction ---
-    let uplift_estimate = xlearner.predict_uplift(x.as_ref());
+    let uplift_estimate = xregressor.predict_uplift(x.as_ref());
 
     // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
@@ -60,7 +60,7 @@ fn test_xlearner() {
     let avg_uplift = sum_uplift / n_samples as f32;
 
     println!(
-        "True Uplift: 5.0, X-Learner Estimated Avg Uplift: {:.4}",
+        "True Uplift: 5.0, XRegressor Estimated Avg Uplift: {:.4}",
         avg_uplift
     );
 
@@ -71,14 +71,14 @@ fn test_xlearner() {
     );
 
     // --- Verification: Explanation Consistency ---
-    // In X-Learner, the explanation must account for the dynamic base value
+    // In XRegressor, the explanation must account for the dynamic base value
     // caused by the propensity-weighted blending of two models.
-    let uplift_explanation = xlearner.explain_uplift(x.as_ref());
+    let uplift_explanation = xregressor.explain_uplift(x.as_ref());
 
-    // X-Learner's explanation matrix should have n_features columns.
+    // XRegressor's explanation matrix should have n_features columns.
     assert_eq!(uplift_explanation.ncols(), n_features);
 
-    let p_pred = xlearner.p.predict(x.as_ref());
+    let p_pred = xregressor.p.predict(x.as_ref());
 
     for r_idx in 0..x.nrows() {
         let mut explained_total = 0.0;
@@ -90,16 +90,16 @@ fn test_xlearner() {
         // Dynamic Base Value: g(x)*base_tau0 + (1-g(x))*base_tau1
         let gi = p_pred[r_idx].clamp(0.01, 0.99);
         let dynamic_base =
-            gi * xlearner.tau_t0.base_value + (1.0 - gi) * xlearner.tau_t1.base_value;
+            gi * xregressor.tau_t0.base_value + (1.0 - gi) * xregressor.tau_t1.base_value;
 
         let total_reconstructed_uplift = explained_total + dynamic_base;
         assert!(
             (total_reconstructed_uplift - uplift_estimate[r_idx]).abs() < 1e-4,
-            "X-Learner explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
+            "XRegressor explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
             r_idx,
             total_reconstructed_uplift,
             uplift_estimate[r_idx]
         );
     }
-    println!("XLearner verification passed!");
+    println!("XRegressor verification passed!");
 }

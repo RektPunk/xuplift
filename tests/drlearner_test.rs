@@ -1,9 +1,9 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::drlearner::DRLearner;
+use xuplift::metalearners::drlearner::DRRegressor;
 
 #[test]
-fn test_drlearner() {
+fn test_drregerssor() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -11,10 +11,6 @@ fn test_drlearner() {
     let mut t = Col::<f32>::zeros(n_samples);
     let mut y = Col::<f32>::zeros(n_samples);
 
-    // --- Synthetic Data Generation ---
-    // Objective: Simulate a scenario where Treatment (T=1) is rare.
-    // Generative Model: y = 1.5*x0 + 0.5*sin(x1) + (5.0 * t) + 10.0
-    // Ground Truth Uplift (ITE): 5.0
     for r_idx in 0..n_samples {
         let x0 = r_idx as f32 * 0.02;
         let x1 = (r_idx as f32 * 0.1).cos();
@@ -24,21 +20,13 @@ fn test_drlearner() {
         x[(r_idx, 1)] = x1;
         x[(r_idx, 2)] = x2;
 
-        // Intentional Imbalance: Only 20% receive treatment
-        // DR-Learner should handle the 20/80 imbalance well
         let treatment = if r_idx % 5 == 0 { 1.0 } else { 0.0 };
         t[r_idx] = treatment;
-
-        // Outcome with a constant treatment effect of 5.0
         y[r_idx] = 1.5 * x0 + 0.5 * x1.sin() + (5.0 * treatment) + 10.0;
     }
 
-    // --- Model Initialization ---
-    // DR-Learner fits 4 models:
-    // Stage 1: mu_1, mu_0 (base outcomes) | Stage 2: p (propensity score)
-    // Stage 3: Construct pseudo-outcomes | Stage 4: tau (CATE regressor)
     let is_categorical = vec![false; n_features];
-    let drlearner = DRLearner::new(
+    let drregressor = DRRegressor::new(
         x.as_ref(),
         t.as_ref(),
         y.as_ref(),
@@ -50,40 +38,29 @@ fn test_drlearner() {
         0.1,
     );
 
-    // --- Prediction ---
-    let uplift_estimate = drlearner.predict_uplift(x.as_ref());
+    let uplift_estimate = drregressor.predict_uplift(x.as_ref());
 
-    // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
     for r_idx in 0..n_samples {
         sum_uplift += uplift_estimate[r_idx];
     }
     let avg_uplift = sum_uplift / n_samples as f32;
-
-    println!(
-        "True Uplift: 5.0, DRLearner Estimated Avg Uplift: {:.4}",
-        avg_uplift
-    );
-
     assert!(
         (avg_uplift - 5.0).abs() < 0.1,
         "Uplift estimation error too high. Got: {:.4}",
         avg_uplift
     );
 
-    // --- Verification: Explanation Consistency ---
-    // In DR-Learner, the explanation is straightforward because it uses a tau regressor.
-    let uplift_explanation = drlearner.explain_uplift(x.as_ref());
+    let uplift_explanation = drregressor.explain_uplift(x.as_ref());
     assert_eq!(uplift_explanation.ncols(), n_features);
 
-    let base_value = drlearner.tau.base_value;
+    let base_value = drregressor.tau.base_value;
     for r_idx in 0..x.nrows() {
         let mut explained_total = 0.0;
         for p_idx in 0..uplift_explanation.ncols() {
             explained_total += uplift_explanation[(r_idx, p_idx)];
         }
 
-        // Reconstructed Uplift = sum(feature_contributions) + base_value
         let total_reconstructed_uplift = explained_total + base_value;
         assert!(
             (total_reconstructed_uplift - uplift_estimate[r_idx]).abs() < 1e-4,
@@ -93,5 +70,4 @@ fn test_drlearner() {
             uplift_estimate[r_idx]
         );
     }
-    println!("DRLearner verification passed!");
 }

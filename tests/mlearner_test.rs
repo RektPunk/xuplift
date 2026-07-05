@@ -1,9 +1,9 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::mlearner::MLearner;
+use xuplift::metalearners::mlearner::MRegressor;
 
 #[test]
-fn test_mlearner() {
+fn test_mregressor() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -32,12 +32,12 @@ fn test_mlearner() {
     }
 
     // --- Model Initialization ---
-    // MLearner applies target transformation and fits a tau model on the pseudo-outcomes.
+    // MRegressor applies target transformation and fits a tau model on the pseudo-outcomes.
     let is_categorical = vec![false; n_features];
-    let mlearner = MLearner::new(x.as_ref(), t.as_ref(), y.as_ref(), &is_categorical, 64, 0.1);
+    let mregressor = MRegressor::new(x.as_ref(), t.as_ref(), y.as_ref(), &is_categorical, 64, 0.1);
 
     // --- Prediction ---
-    let uplift_estimate = mlearner.predict_uplift(x.as_ref());
+    let uplift_estimate = mregressor.predict_uplift(x.as_ref());
 
     // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
@@ -47,7 +47,7 @@ fn test_mlearner() {
     let avg_uplift = sum_uplift / n_samples as f32;
 
     println!(
-        "True Uplift: 5.0, M-Learner Estimated Average Uplift: {:.4}",
+        "True Uplift: 5.0, MRegressor Estimated Average Uplift: {:.4}",
         avg_uplift
     );
 
@@ -58,13 +58,13 @@ fn test_mlearner() {
     );
 
     // --- Verification: Explanation Consistency ---
-    // In M-Learner, the explanation is straightforward because it uses a tau regressor.
-    let uplift_explanation = mlearner.explain_uplift(x.as_ref());
+    // In MRegressor, the explanation is straightforward because it uses a tau regressor.
+    let uplift_explanation = mregressor.explain_uplift(x.as_ref());
 
-    // M-Learner's explanation matrix should have n_features columns.
+    // MRegressor's explanation matrix should have n_features columns.
     assert_eq!(uplift_explanation.ncols(), n_features);
 
-    let base_value = mlearner.tau.base_value;
+    let base_value = mregressor.tau.base_value;
     for r_idx in 0..x.nrows() {
         let mut explained_total = 0.0;
         for p_idx in 0..uplift_explanation.ncols() {
@@ -81,5 +81,5 @@ fn test_mlearner() {
             uplift_estimate[r_idx]
         );
     }
-    println!("MLearner verification passed!");
+    println!("MRegressor verification passed!");
 }

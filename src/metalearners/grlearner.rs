@@ -6,12 +6,7 @@ use crate::xmodels::classifier::Classifier;
 use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
-/// Generalized R-Learner Classifier (GR-Classifier) for Uplift Modeling.
-///
-/// This learner isolates the causal effect by residualizing both the outcome and the treatment.
-/// Unlike the standard R-Learner which uses a Classifier for binary treatment propensity,
-/// GR-Learner uses a Regressor for the treatment model, making it capable of handling
-/// both continuous and binary treatment variables natively.
+/// Generalized Residual Classifier for Uplift Modeling.
 ///
 /// # Reference
 /// * Nie, X., & Wager, S. (2021). Quasi-oracle estimation of heterogeneous treatment effects. Biometrika, 108(2), 299–319. https://doi.org/10.1093/biomet/asaa076
@@ -30,6 +25,7 @@ impl GRClassifier {
     /// * `is_categorical` - Vector indicating whether each feature is categorical (n_features).
     /// * `max_bases` - Maximum number of landmark points for the kernel feature map.
     /// * `mu_penalty` - Regularization penalty for the outcome model.
+    /// * `mu_max_iter` - Maximum number of iterations for the outcome model.
     /// * `p_penalty` - Regularization penalty for the treatment model.
     /// * `tau_penalty` - Regularization penalty for the treatment effect model.
     pub fn new(
@@ -76,7 +72,7 @@ impl GRClassifier {
         // Objective: Minimize (y_tilde - t_tilde * tau)^2
         // Equivalent to Weighted Least Squares: Minimize sum( w_i * (target_i - tau)^2 )
         let r_target_col = Col::<f32>::from_fn(num_rows, |i| {
-            let y_tilde = y[i] - mu_pred[i];
+            let y_tilde = y[i] - mu_pred[i].clamp(0.01, 0.99);
             let t_tilde = t[i] - p_pred[i];
             if t_tilde.abs() > 1e-5 {
                 y_tilde / t_tilde
@@ -109,7 +105,7 @@ impl GRClassifier {
     }
 }
 
-/// Generalized R-Learner Regressor (GR-Regressor) for Uplift Modeling.
+/// Generalized Residual Regressor for Uplift Modeling.
 pub struct GRRegressor {
     /// Treatment effect model
     pub tau: Regressor,

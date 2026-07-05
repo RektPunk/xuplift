@@ -1,9 +1,9 @@
 use faer::{Col, Mat};
 
-use xuplift::metalearners::rlearner::RLearner;
+use xuplift::metalearners::rlearner::RRegressor;
 
 #[test]
-fn test_rlearner() {
+fn test_rregressor() {
     let n_samples = 500;
     let n_features = 3;
 
@@ -33,9 +33,9 @@ fn test_rlearner() {
     }
 
     // --- Model Initialization ---
-    // R-Learner fits: m(x) [Outcome], e(x) [Propensity], and tau(x) [Residual-on-Residual]
+    // RRegressor fits: m(x) [Outcome], e(x) [Propensity], and tau(x) [Residual-on-Residual]
     let is_categorical = vec![false; n_features];
-    let rlearner = RLearner::new(
+    let rregressor = RRegressor::new(
         x.as_ref(),
         t.as_ref(),
         y.as_ref(),
@@ -48,7 +48,7 @@ fn test_rlearner() {
     );
 
     // --- Prediction ---
-    let uplift_estimate = rlearner.predict_uplift(x.as_ref());
+    let uplift_estimate = rregressor.predict_uplift(x.as_ref());
 
     // --- Verification: Accuracy ---
     let mut sum_uplift = 0.0;
@@ -58,18 +58,18 @@ fn test_rlearner() {
     let avg_uplift = sum_uplift / n_samples as f32;
 
     println!(
-        "True Uplift: 5.0, R-Learner Estimated Avg Uplift: {:.4}",
+        "True Uplift: 5.0, RRegressor Estimated Avg Uplift: {:.4}",
         avg_uplift
     );
 
     assert!(
         (avg_uplift - 5.0).abs() < 0.1,
-        "R-Learner estimation is too far from ground truth. Got: {:.4}",
+        "RRegressor estimation is too far from ground truth. Got: {:.4}",
         avg_uplift
     );
 
     // --- Verification: Explanation Consistency ---
-    let uplift_explanation = rlearner.explain_uplift(x.as_ref());
+    let uplift_explanation = rregressor.explain_uplift(x.as_ref());
 
     // R-Learner's explanation matrix should have n_features columns.
     assert_eq!(uplift_explanation.ncols(), n_features);
@@ -81,14 +81,14 @@ fn test_rlearner() {
         }
 
         // Reconstructed Uplift = sum(feature_contributions) + base_value
-        let total_reconstructed_uplift = explained_total + rlearner.tau.base_value;
+        let total_reconstructed_uplift = explained_total + rregressor.tau.base_value;
         assert!(
             (total_reconstructed_uplift - uplift_estimate[r_idx]).abs() < 1e-4,
-            "R-Learner explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
+            "RRegressor explanation mismatch at sample {}: Explained {:.4}, Predicted {:.4}",
             r_idx,
             total_reconstructed_uplift,
             uplift_estimate[r_idx]
         );
     }
-    println!("RLearner verification passed!");
+    println!("RRegressor verification passed!");
 }

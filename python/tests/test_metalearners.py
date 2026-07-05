@@ -1,14 +1,14 @@
 import numpy as np
 import pytest
 from xuplift import (
-    DRLearner,
-    GRLearner,
-    MLearner,
-    PWLearner,
-    RLearner,
-    SLearner,
-    TLearner,
-    XLearner,
+    DRRegressor,
+    GRRegressor,
+    MRegressor,
+    PWRegressor,
+    RRegressor,
+    SRegressor,
+    TRegressor,
+    XRegressor,
 )
 
 
@@ -26,9 +26,9 @@ def uplift_data():
     return x, t, y
 
 
-def test_drlearner(uplift_data):
+def test_drregressor(uplift_data):
     x, t, y = uplift_data
-    model = DRLearner(
+    model = DRRegressor(
         x,
         t,
         y,
@@ -47,9 +47,9 @@ def test_drlearner(uplift_data):
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_grlearner(uplift_data):
+def test_grregressor(uplift_data):
     x, t, y = uplift_data
-    model = GRLearner(
+    model = GRRegressor(
         x,
         t,
         y,
@@ -67,9 +67,9 @@ def test_grlearner(uplift_data):
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_mlearner(uplift_data):
+def test_mregressor(uplift_data):
     x, t, y = uplift_data
-    model = MLearner(x, t, y, [False, False, False], max_bases=64, tau_penalty=0.1)
+    model = MRegressor(x, t, y, [False, False, False], max_bases=64, tau_penalty=0.1)
 
     ite = model.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
@@ -78,9 +78,9 @@ def test_mlearner(uplift_data):
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_pwlearner(uplift_data):
+def test_pwregressor(uplift_data):
     x, t, y = uplift_data
-    model = PWLearner(
+    model = PWRegressor(
         x,
         t,
         y,
@@ -98,9 +98,9 @@ def test_pwlearner(uplift_data):
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_rlearner(uplift_data):
+def test_rregressor(uplift_data):
     x, t, y = uplift_data
-    model = RLearner(
+    model = RRegressor(
         x,
         t,
         y,
@@ -119,21 +119,21 @@ def test_rlearner(uplift_data):
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_slearner(uplift_data):
+def test_sregressor(uplift_data):
     x, t, y = uplift_data
-    model = SLearner(x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1)
+    model = SRegressor(x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1)
 
     ite = model.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
 
     explanation = model.explain_uplift(x)
-    # SLearner explain_uplift returns (n_samples, n_features + 1)
+    # SRegressor explain_uplift returns (n_samples, n_features + 1)
     assert explanation.shape == (x.shape[0], x.shape[1] + 1)
 
 
-def test_tlearner(uplift_data):
+def test_tregressor(uplift_data):
     x, t, y = uplift_data
-    model = TLearner(x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1)
+    model = TRegressor(x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1)
 
     ite = model.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
@@ -142,9 +142,9 @@ def test_tlearner(uplift_data):
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_xlearner(uplift_data):
+def test_xregressor(uplift_data):
     x, t, y = uplift_data
-    model = XLearner(
+    model = XRegressor(
         x,
         t,
         y,
