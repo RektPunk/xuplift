@@ -3,14 +3,11 @@ use xuplift::xmodels::feature_map::KernelFeatureMap;
 
 #[test]
 fn test_feature_map_basic_functionality() {
-    // --- Model Initialization ---
-    // Verify that the KernelFeatureMap initializes and fits correctly on a standard linear dataset.
     let data = Mat::from_fn(10, 2, |r, c| (r as f32) + (c as f32));
     let mut map = KernelFeatureMap::new(64);
     let is_categorical = vec![false; 2];
     map.fit(data.as_ref(), &is_categorical);
 
-    // --- Verification ---
     assert_eq!(map.num_features, 2);
     assert!(map.num_bases > 0);
     assert_eq!(map.feature_bases.len(), 2);
@@ -21,14 +18,11 @@ fn test_feature_map_basic_functionality() {
 
 #[test]
 fn test_transform_feature_into() {
-    // --- Model Initialization ---
-    // Verify that the transform operation produces matrices with the correct dimensions.
     let data = Mat::from_fn(5, 2, |r, c| (r as f32) * (c as f32 + 1.0));
     let mut map = KernelFeatureMap::new(64);
     let is_categorical = vec![false; 2];
     map.fit(data.as_ref(), &is_categorical);
 
-    // --- Verification ---
     for f_idx in 0..map.num_features {
         let mut transformed = Mat::<f32>::zeros(5, map.num_bases);
         map.transform_feature_into(data.as_ref(), f_idx, transformed.as_mut());
@@ -39,9 +33,6 @@ fn test_transform_feature_into() {
 
 #[test]
 fn test_full_transform_matches_feature_transform() {
-    // --- Model Initialization ---
-    // Verify that transforming the full matrix via `transform` yields identical results
-    // to feature-wise transformation (`transform_feature_into`) at the correct column offsets.
     let data = Mat::from_fn(5, 2, |r, c| (r as f32) + (c as f32));
     let mut map = KernelFeatureMap::new(64);
 
@@ -75,8 +66,6 @@ fn test_full_transform_matches_feature_transform() {
 
 #[test]
 fn test_nan_handling_in_feature_map() {
-    // --- Synthetic Data Generation ---
-    // Create a matrix with some NaNs to verify robust handling during training
     let data = Mat::from_fn(4, 1, |r, _| match r {
         0 => 1.0,
         1 => f32::NAN,
@@ -85,14 +74,10 @@ fn test_nan_handling_in_feature_map() {
         _ => 0.0,
     });
 
-    // --- Model Initialization ---
     let mut map = KernelFeatureMap::new(64);
     let is_categorical = vec![false; 1];
     map.fit(data.as_ref(), &is_categorical);
 
-    // --- Verification ---
-    // Test `transform` with a NaN row
-    // Verify that the transformer correctly masks NaNs by outputting a zero vector.
     let x_nan = Mat::from_fn(1, 1, |_, _| f32::NAN);
     let z_nan = map.transform(x_nan.as_ref());
 
@@ -108,7 +93,6 @@ fn test_nan_handling_in_feature_map() {
         }
     }
 
-    // Test `transform` with a valid row
     let x_valid = Mat::from_fn(1, 1, |_, _| 2.0);
     let z_valid = map.transform(x_valid.as_ref());
 
