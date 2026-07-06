@@ -107,6 +107,7 @@ class RClassifier(MetaLearner):
         is_categorical: list[bool],
         max_bases: int,
         mu_penalty: float,
+        mu_max_iter: int,
         p_penalty: float,
         p_max_iter: int,
         tau_penalty: float,

@@ -170,6 +170,7 @@ def test_rlearner(uplift_data):
         [False, False, False],
         max_bases=64,
         mu_penalty=0.1,
+        mu_max_iter=10,
         p_penalty=0.1,
         p_max_iter=10,
         tau_penalty=0.1,
