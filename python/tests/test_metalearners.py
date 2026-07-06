@@ -1,13 +1,19 @@
 import numpy as np
 import pytest
 from xuplift import (
+    DRClassifier,
     DRRegressor,
+    GRClassifier,
     GRRegressor,
     MRegressor,
     PWRegressor,
+    RClassifier,
     RRegressor,
+    SClassifier,
     SRegressor,
+    TClassifier,
     TRegressor,
+    XClassifier,
     XRegressor,
 )
 
@@ -26,9 +32,9 @@ def uplift_data():
     return x, t, y
 
 
-def test_drregressor(uplift_data):
+def test_drlearner(uplift_data):
     x, t, y = uplift_data
-    model = DRRegressor(
+    regressor = DRRegressor(
         x,
         t,
         y,
@@ -40,16 +46,35 @@ def test_drregressor(uplift_data):
         tau_penalty=0.1,
     )
 
-    ite = model.predict_uplift(x)
+    ite = regressor.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
 
-    explanation = model.explain_uplift(x)
+    explanation = regressor.explain_uplift(x)
+    assert explanation.shape == (x.shape[0], x.shape[1])
+
+    classifier = DRClassifier(
+        x,
+        t,
+        y,
+        [False, False, False],
+        max_bases=64,
+        mu_penalty=0.1,
+        mu_max_iter=10,
+        p_penalty=0.1,
+        p_max_iter=10,
+        tau_penalty=0.1,
+    )
+
+    ite = classifier.predict_uplift(x)
+    assert ite.shape == (x.shape[0],)
+
+    explanation = classifier.explain_uplift(x)
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_grregressor(uplift_data):
+def test_grlearner(uplift_data):
     x, t, y = uplift_data
-    model = GRRegressor(
+    regressor = GRRegressor(
         x,
         t,
         y,
@@ -60,27 +85,47 @@ def test_grregressor(uplift_data):
         tau_penalty=0.1,
     )
 
-    ite = model.predict_uplift(x)
+    ite = regressor.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
 
-    explanation = model.explain_uplift(x)
+    explanation = regressor.explain_uplift(x)
+    assert explanation.shape == (x.shape[0], x.shape[1])
+
+    classifier = GRClassifier(
+        x,
+        t,
+        y,
+        [False, False, False],
+        max_bases=64,
+        mu_penalty=0.1,
+        mu_max_iter=10,
+        p_penalty=0.1,
+        tau_penalty=0.1,
+    )
+
+    ite = classifier.predict_uplift(x)
+    assert ite.shape == (x.shape[0],)
+
+    explanation = classifier.explain_uplift(x)
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_mregressor(uplift_data):
+def test_mlearner(uplift_data):
     x, t, y = uplift_data
-    model = MRegressor(x, t, y, [False, False, False], max_bases=64, tau_penalty=0.1)
+    regressor = MRegressor(
+        x, t, y, [False, False, False], max_bases=64, tau_penalty=0.1
+    )
 
-    ite = model.predict_uplift(x)
+    ite = regressor.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
 
-    explanation = model.explain_uplift(x)
+    explanation = regressor.explain_uplift(x)
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_pwregressor(uplift_data):
+def test_pwlearner(uplift_data):
     x, t, y = uplift_data
-    model = PWRegressor(
+    regressor = PWRegressor(
         x,
         t,
         y,
@@ -91,16 +136,16 @@ def test_pwregressor(uplift_data):
         tau_penalty=0.1,
     )
 
-    ite = model.predict_uplift(x)
+    ite = regressor.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
 
-    explanation = model.explain_uplift(x)
+    explanation = regressor.explain_uplift(x)
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_rregressor(uplift_data):
+def test_rlearner(uplift_data):
     x, t, y = uplift_data
-    model = RRegressor(
+    regressor = RRegressor(
         x,
         t,
         y,
@@ -112,39 +157,77 @@ def test_rregressor(uplift_data):
         tau_penalty=0.1,
     )
 
-    ite = model.predict_uplift(x)
+    ite = regressor.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
 
-    explanation = model.explain_uplift(x)
+    explanation = regressor.explain_uplift(x)
+    assert explanation.shape == (x.shape[0], x.shape[1])
+
+    classifier = RClassifier(
+        x,
+        t,
+        y,
+        [False, False, False],
+        max_bases=64,
+        mu_penalty=0.1,
+        p_penalty=0.1,
+        p_max_iter=10,
+        tau_penalty=0.1,
+    )
+
+    ite = classifier.predict_uplift(x)
+    assert ite.shape == (x.shape[0],)
+
+    explanation = classifier.explain_uplift(x)
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_sregressor(uplift_data):
+def test_slearner(uplift_data):
     x, t, y = uplift_data
-    model = SRegressor(x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1)
+    regressor = SRegressor(x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1)
 
-    ite = model.predict_uplift(x)
+    ite = regressor.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
 
-    explanation = model.explain_uplift(x)
+    explanation = regressor.explain_uplift(x)
     # SRegressor explain_uplift returns (n_samples, n_features + 1)
     assert explanation.shape == (x.shape[0], x.shape[1] + 1)
 
+    classifier = SClassifier(
+        x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1, mu_max_iter=10
+    )
 
-def test_tregressor(uplift_data):
-    x, t, y = uplift_data
-    model = TRegressor(x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1)
-
-    ite = model.predict_uplift(x)
+    ite = classifier.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
 
-    explanation = model.explain_uplift(x)
+    explanation = classifier.explain_uplift(x)
+    assert explanation.shape == (x.shape[0], x.shape[1] + 1)
+
+
+def test_tlearner(uplift_data):
+    x, t, y = uplift_data
+    regressor = TRegressor(x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1)
+
+    ite = regressor.predict_uplift(x)
+    assert ite.shape == (x.shape[0],)
+
+    explanation = regressor.explain_uplift(x)
+    assert explanation.shape == (x.shape[0], x.shape[1])
+
+    classifier = TClassifier(
+        x, t, y, [False, False, False], max_bases=64, mu_penalty=0.1, mu_max_iter=10
+    )
+
+    ite = classifier.predict_uplift(x)
+    assert ite.shape == (x.shape[0],)
+
+    explanation = classifier.explain_uplift(x)
     assert explanation.shape == (x.shape[0], x.shape[1])
 
 
-def test_xregressor(uplift_data):
+def test_xlearner(uplift_data):
     x, t, y = uplift_data
-    model = XRegressor(
+    regressor = XRegressor(
         x,
         t,
         y,
@@ -156,8 +239,27 @@ def test_xregressor(uplift_data):
         tau_penalty=0.1,
     )
 
-    ite = model.predict_uplift(x)
+    ite = regressor.predict_uplift(x)
     assert ite.shape == (x.shape[0],)
 
-    explanation = model.explain_uplift(x)
+    explanation = regressor.explain_uplift(x)
+    assert explanation.shape == (x.shape[0], x.shape[1])
+
+    classifier = XClassifier(
+        x,
+        t,
+        y,
+        [False, False, False],
+        max_bases=64,
+        mu_penalty=0.1,
+        mu_max_iter=10,
+        p_penalty=0.1,
+        p_max_iter=10,
+        tau_penalty=0.1,
+    )
+
+    ite = classifier.predict_uplift(x)
+    assert ite.shape == (x.shape[0],)
+
+    explanation = classifier.explain_uplift(x)
     assert explanation.shape == (x.shape[0], x.shape[1])
