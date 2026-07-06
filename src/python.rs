@@ -6,14 +6,14 @@ use pyo3::prelude::*;
 pub use crate::xmodels::classifier::Classifier;
 pub use crate::xmodels::regressor::Regressor;
 
-pub use crate::metalearners::drlearner::DRLearner;
-pub use crate::metalearners::grlearner::GRLearner;
-pub use crate::metalearners::mlearner::MLearner;
-pub use crate::metalearners::pwlearner::PWLearner;
-pub use crate::metalearners::rlearner::RLearner;
-pub use crate::metalearners::slearner::SLearner;
-pub use crate::metalearners::tlearner::TLearner;
-pub use crate::metalearners::xlearner::XLearner;
+pub use crate::metalearners::drlearner::{DRClassifier, DRRegressor};
+pub use crate::metalearners::grlearner::{GRClassifier, GRRegressor};
+pub use crate::metalearners::mlearner::MRegressor;
+pub use crate::metalearners::pwlearner::PWRegressor;
+pub use crate::metalearners::rlearner::{RClassifier, RRegressor};
+pub use crate::metalearners::slearner::{SClassifier, SRegressor};
+pub use crate::metalearners::tlearner::{TClassifier, TRegressor};
+pub use crate::metalearners::xlearner::{XClassifier, XRegressor};
 
 /// Converts `numpy` views into `faer` reference types.
 pub trait IntoFaer {
@@ -210,49 +210,85 @@ impl_py_xmodels!(
 
 // Generate Python bindings for causal metalearners
 impl_py_learner!(
-    "DRLearner", PyDRLearner, DRLearner,
+    "DRClassifier", PyDRClassifier, DRClassifier,
+    (max_bases: usize, mu_penalty: f32, mu_max_iter: usize, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
+    (max_bases, mu_penalty, mu_max_iter, p_penalty, p_max_iter, tau_penalty)
+);
+
+impl_py_learner!(
+    "DRRegressor", PyDRRegressor, DRRegressor,
     (max_bases: usize, mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
     (max_bases, mu_penalty, p_penalty, p_max_iter, tau_penalty)
 );
 
 impl_py_learner!(
-    "GRLearner", PyGRLearner, GRLearner,
+    "GRClassifier", PyGRClassifier, GRClassifier,
+    (max_bases: usize, mu_penalty: f32, mu_max_iter: usize, p_penalty: f32, tau_penalty: f32),
+    (max_bases, mu_penalty, mu_max_iter, p_penalty, tau_penalty)
+);
+
+impl_py_learner!(
+    "GRRegressor", PyGRRegressor, GRRegressor,
     (max_bases: usize, mu_penalty: f32, p_penalty: f32, tau_penalty: f32),
     (max_bases, mu_penalty, p_penalty, tau_penalty)
 );
 
 impl_py_learner!(
-    "MLearner", PyMLearner, MLearner,
+    "MRegressor", PyMRegressor, MRegressor,
     (max_bases: usize, tau_penalty: f32),
     (max_bases, tau_penalty)
 );
 
 impl_py_learner!(
-    "PWLearner", PyPWLearner, PWLearner,
+    "PWRegressor", PyPWRegressor, PWRegressor,
     (max_bases: usize, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
     (max_bases, p_penalty, p_max_iter, tau_penalty)
 );
 
 impl_py_learner!(
-    "SLearner", PySLearner, SLearner,
+    "SClassifier", PySClassifier, SClassifier,
+    (max_bases: usize, mu_penalty: f32, mu_max_iter: usize),
+    (max_bases, mu_penalty, mu_max_iter)
+);
+
+impl_py_learner!(
+    "SRegressor", PySRegressor, SRegressor,
     (max_bases: usize, mu_penalty: f32),
     (max_bases, mu_penalty)
 );
 
 impl_py_learner!(
-    "RLearner", PyRLearner, RLearner,
+    "RClassifier", PyRClassifier, RClassifier,
+    (max_bases: usize, mu_penalty: f32, mu_max_iter: usize, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
+    (max_bases, mu_penalty, mu_max_iter, p_penalty, p_max_iter, tau_penalty)
+);
+
+impl_py_learner!(
+    "RRegressor", PyRRegressor, RRegressor,
     (max_bases: usize, mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
     (max_bases, mu_penalty, p_penalty, p_max_iter, tau_penalty)
 );
 
 impl_py_learner!(
-    "TLearner", PyTLearner, TLearner,
+    "TClassifier", PyTClassifier, TClassifier,
+    (max_bases: usize, mu_penalty: f32, mu_max_iter: usize),
+    (max_bases, mu_penalty, mu_max_iter)
+);
+
+impl_py_learner!(
+    "TRegressor", PyTRegressor, TRegressor,
     (max_bases: usize, mu_penalty: f32),
     (max_bases, mu_penalty)
 );
 
 impl_py_learner!(
-    "XLearner", PyXLearner, XLearner,
+    "XClassifier", PyXClassifier, XClassifier,
+    (max_bases: usize, mu_penalty: f32, mu_max_iter: usize, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
+    (max_bases, mu_penalty, mu_max_iter, p_penalty, p_max_iter, tau_penalty)
+);
+
+impl_py_learner!(
+    "XRegressor", PyXRegressor, XRegressor,
     (max_bases: usize, mu_penalty: f32, p_penalty: f32, p_max_iter: usize, tau_penalty: f32),
     (max_bases, mu_penalty, p_penalty, p_max_iter, tau_penalty)
 );

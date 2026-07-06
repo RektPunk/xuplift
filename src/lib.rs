@@ -11,14 +11,27 @@ fn xuplift(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<python::PyClassifier>()?;
     m.add_class::<python::PyRegressor>()?;
 
-    m.add_class::<python::PyDRLearner>()?;
-    m.add_class::<python::PyGRLearner>()?;
-    m.add_class::<python::PyMLearner>()?;
-    m.add_class::<python::PyPWLearner>()?;
-    m.add_class::<python::PyRLearner>()?;
-    m.add_class::<python::PySLearner>()?;
-    m.add_class::<python::PyTLearner>()?;
-    m.add_class::<python::PyXLearner>()?;
+    m.add_class::<python::PyDRClassifier>()?;
+    m.add_class::<python::PyDRRegressor>()?;
+
+    m.add_class::<python::PyGRClassifier>()?;
+    m.add_class::<python::PyGRRegressor>()?;
+
+    m.add_class::<python::PyMRegressor>()?;
+
+    m.add_class::<python::PyPWRegressor>()?;
+
+    m.add_class::<python::PyRClassifier>()?;
+    m.add_class::<python::PyRRegressor>()?;
+
+    m.add_class::<python::PySClassifier>()?;
+    m.add_class::<python::PySRegressor>()?;
+
+    m.add_class::<python::PyTClassifier>()?;
+    m.add_class::<python::PyTRegressor>()?;
+
+    m.add_class::<python::PyXClassifier>()?;
+    m.add_class::<python::PyXRegressor>()?;
 
     Ok(())
 }

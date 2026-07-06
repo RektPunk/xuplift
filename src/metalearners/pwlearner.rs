@@ -6,20 +6,17 @@ use crate::xmodels::classifier::Classifier;
 use crate::xmodels::feature_map::KernelFeatureMap;
 use crate::xmodels::regressor::Regressor;
 
-/// Propensity Score Weighted Learner (PW-Learner) for Uplift Modeling.
-///
-/// This learner uses inverse probability weighting (IPW) to transform the target variable,
-/// correcting for confounding bias using only a propensity score model.
+/// Propensity Score Weighted Regressor for Uplift Modeling.
 ///
 /// # Reference
 /// * Robins, J. M., Hernán, M. Á., & Brumback, B. (2000). Marginal structural models and causal inference in epidemiology. Epidemiology, 11(5), 550–560. https://doi.org/10.1097/00001648-200009000-00011
-pub struct PWLearner {
+pub struct PWRegressor {
     /// Treatment effect model fitted on inverse-probability-weighted pseudo-outcomes
     pub tau: Regressor,
 }
 
-impl PWLearner {
-    /// Initializes and fits the PWLearner using the provided data.
+impl PWRegressor {
+    /// Initializes and fits the PWRegressor using the provided data.
     ///
     /// # Arguments
     /// * `x` - Feature matrix (n_samples x n_features).
@@ -53,8 +50,10 @@ impl PWLearner {
 
         // Fit and predict propensity score model
         let mut p = Classifier::new(max_bases, p_penalty, p_max_iter);
+        let w_all = Col::<f32>::full(num_rows, 1.0);
+
         p.kernel_feature_map = Some(shared_map.clone());
-        p.fit_with_z(z_ref, t);
+        p.fit_with_z(z_ref, t, &w_all);
         let p_pred = p.predict_with_z(z_ref);
 
         // Construct pseudo-outcomes in parallel
