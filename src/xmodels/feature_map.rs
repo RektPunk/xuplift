@@ -1,18 +1,30 @@
-use faer::{Col, Mat, MatMut, MatRef};
-use rand::rng;
-use rand::seq::SliceRandom;
+use faer::{Col, Mat, MatMut, MatRef, Scale};
+use rand::{RngExt, rng};
 use rayon::prelude::*;
 
-/// A transformer that approximates kernel feature maps using the Nystrom method.
-///
-/// It maps input data into a finite-dimensional feature space where linear
-/// operations approximate non-linear kernels (e.g., RBF kernel).
-///
-/// The Nystrom method approximates the kernel matrix $K$ by using a small subset
-/// of $m$ landmark points:
-/// $$K \approx K_{nm} K_{mm}^{-1} K_{mn}$$
-/// where $K_{nm}$ is the kernel between all $n$ samples and $m$ landmarks,
-/// and $K_{mm}$ is the kernel between landmarks.
+pub enum Kernel {
+    Categorical,
+    Rbf { s2_inv: f32 },
+}
+
+impl Kernel {
+    #[inline]
+    fn eval(&self, x: f32, y: f32) -> f32 {
+        match self {
+            Kernel::Categorical => {
+                let diff = (x - y).abs();
+                if diff < 1e-5 { 1.0 } else { 0.0 }
+            }
+
+            Kernel::Rbf { s2_inv } => {
+                let diff = x - y;
+                (-(diff * diff) * s2_inv).exp()
+            }
+        }
+    }
+}
+
+/// A transformer that approximates kernel feature maps.
 pub struct KernelFeatureMap {
     /// Number of input features (columns).
     pub num_features: usize,
@@ -21,18 +33,14 @@ pub struct KernelFeatureMap {
     /// Selected landmark samples from the training set.
     /// Each entry in the vector contains the landmark values per feature.
     pub feature_bases: Vec<Col<f32>>,
-    /// Indicates whether each feature is categorical or continuous.
-    pub is_categorical: Vec<bool>,
 
     /// Learned projection matrices to map data into the kernel space
     /// $P = U \Lambda^{-1/2}$, where $U$ and $\Lambda$ are the eigenvectors and eigenvalues of $K_{mm}$
     pub proj_matrices: Vec<Mat<f32>>,
     /// Column-wise means of the transformed features for centering.
-    /// $\mu_j = \frac{1}{n} \sum_{i=1}^n z_{ij}$
     pub feature_means: Vec<Col<f32>>,
-    /// Inverse of the kernel bandwidth parameter (gamma) for each feature.
-    /// Calculated using the Median Heuristic: $\gamma = \frac{1}{2\sigma^2}$
-    pub s2_invs: Vec<f32>,
+    /// The kernel function to use for each feature.
+    pub kernels: Vec<Kernel>,
 }
 
 impl KernelFeatureMap {
@@ -41,143 +49,92 @@ impl KernelFeatureMap {
             num_features: 0,
             num_bases: max_bases,
             feature_bases: Vec::new(),
-            is_categorical: Vec::new(),
             proj_matrices: Vec::new(),
             feature_means: Vec::new(),
-            s2_invs: Vec::new(),
+            kernels: Vec::new(),
         }
-    }
-
-    #[inline]
-    fn kernel_categorical(diff: f32) -> f32 {
-        if diff.abs() < 1e-5 { 1.0 } else { 0.0 }
-    }
-
-    #[inline]
-    fn kernel_continuous(diff: f32, s2_inv: f32) -> f32 {
-        (-(diff * diff) * s2_inv).exp()
     }
 
     /// Fits the transformer to the input matrix X.
     pub fn fit(&mut self, x: MatRef<'_, f32>, is_categorical: &[bool]) {
+        self.feature_bases.clear();
+        self.proj_matrices.clear();
+        self.feature_means.clear();
+        self.kernels.clear();
+
         let n_samples = x.nrows();
         self.num_features = x.ncols();
-        self.is_categorical = is_categorical.to_owned();
-
-        // Calculate feature means (skipping NaNs) to use for imputation during landmark selection
-        let raw_feature_means: Vec<f32> = (0..self.num_features)
-            .into_par_iter()
-            .map(|f_idx| {
-                let col = x.col(f_idx);
-                let mut sum = 0.0;
-                let mut count = 0;
-                for r_idx in 0..n_samples {
-                    let val = col[r_idx];
-                    if !val.is_nan() {
-                        sum += val;
-                        count += 1;
-                    }
-                }
-                if count > 0 { sum / count as f32 } else { 0.0 }
-            })
-            .collect();
-
-        // Identify rows that have no NaNs across all features to use as high-quality landmark candidates
-        let valid_row_indices: Vec<usize> = (0..n_samples)
-            .into_par_iter()
-            .filter(|&r_idx| (0..self.num_features).all(|f_idx| !x[(r_idx, f_idx)].is_nan()))
-            .collect();
-        let n_valid = valid_row_indices.len();
-
-        // Select landmarks
-        let landmark_indices = if n_valid >= self.num_bases / 2 {
-            self.num_bases = n_valid.min(self.num_bases);
-            let mut rng = rng();
-            let mut indices = valid_row_indices.clone();
-            indices.shuffle(&mut rng);
-            indices[..self.num_bases].to_vec()
-        } else {
-            self.num_bases = n_samples.min(self.num_bases);
-            let mut all_indices: Vec<usize> = (0..n_samples).collect();
-            let mut rng = rng();
-            all_indices.shuffle(&mut rng);
-            all_indices[..self.num_bases].to_vec()
-        };
-
         let max_dist_pairs = self.num_bases * (self.num_bases - 1) / 2;
         let feature_params: Vec<_> = (0..self.num_features)
             .into_par_iter()
             .map(|f_idx| {
-                let f_mean = raw_feature_means[f_idx];
-                let is_categorical_f = is_categorical[f_idx];
+                let x_col = x.col(f_idx);
+                let mut rng = rng();
+                let mut valid_indices: Vec<usize> =
+                    (0..n_samples).filter(|&i| !x_col[i].is_nan()).collect();
+                assert!(
+                    valid_indices.len() >= self.num_bases,
+                    "Not enough valid samples in feature {}. Expected at least {}, but got {}.",
+                    f_idx,
+                    self.num_bases,
+                    valid_indices.len()
+                );
 
-                // Median Heuristic: sets sigma to the median of pairwise distances between landmarks
-                let s2_inv = if is_categorical_f {
-                    1.0
+                for i in 0..self.num_bases {
+                    let j = rng.random_range(i..valid_indices.len());
+                    valid_indices.swap(i, j);
+                }
+                let landmark_indices = &valid_indices[..self.num_bases];
+                let is_categorical_f = is_categorical[f_idx];
+                let kernel = if is_categorical_f {
+                    Kernel::Categorical
                 } else {
-                    let mut dists_buf = vec![0.0f32; max_dist_pairs];
-                    let mut dists_count = 0;
-                    for b_i_idx in 0..self.num_bases {
-                        let val_i = {
-                            let v = x[(landmark_indices[b_i_idx], f_idx)];
-                            if v.is_nan() { f_mean } else { v }
-                        };
-                        for b_j_idx in b_i_idx + 1..self.num_bases {
-                            let val_j = {
-                                let v = x[(landmark_indices[b_j_idx], f_idx)];
-                                if v.is_nan() { f_mean } else { v }
+                    Kernel::Rbf {
+                        s2_inv: {
+                            // Use the inverse median distance as the rbf kernel inverse variance
+                            let mut dists_buf = vec![0.0f32; max_dist_pairs];
+                            let mut dists_count = 0;
+                            for b_i_idx in 0..self.num_bases {
+                                let val_i = x_col[landmark_indices[b_i_idx]];
+                                for b_j_idx in b_i_idx + 1..self.num_bases {
+                                    dists_buf[dists_count] =
+                                        (val_i - x_col[landmark_indices[b_j_idx]]).abs();
+                                    dists_count += 1;
+                                }
+                            }
+                            let dists = &mut dists_buf[..dists_count];
+                            dists.sort_by(|a, b| a.total_cmp(b));
+                            let median = if !dists.is_empty() {
+                                let mid = dists.len() / 2;
+                                if dists.len().is_multiple_of(2) {
+                                    (dists[mid] + dists[mid - 1]) * 0.5
+                                } else {
+                                    dists[mid]
+                                }
+                            } else {
+                                1.0
                             };
-                            dists_buf[dists_count] = (val_i - val_j).abs();
-                            dists_count += 1;
-                        }
+                            // Precision parameter $\gamma = 1 / (2 \cdot \text{median}^2)$
+                            1.0 / (2.0 * (median.max(1e-4)).powi(2))
+                        },
                     }
-                    let dists = &mut dists_buf[..dists_count];
-                    dists.sort_by(|a, b| a.total_cmp(b));
-                    let median = if !dists.is_empty() {
-                        let mid = dists.len() / 2;
-                        if dists.len().is_multiple_of(2) {
-                            (dists[mid] + dists[mid - 1]) * 0.5
-                        } else {
-                            dists[mid]
-                        }
-                    } else {
-                        1.0
-                    };
-                    // Precision parameter $\gamma = 1 / (2 \cdot \text{median}^2)$
-                    1.0 / (2.0 * (median.max(1e-4)).powi(2))
                 };
 
                 // Store landmark values
-                let mut bases = Col::<f32>::zeros(self.num_bases);
+                let mut basis = Col::<f32>::zeros(self.num_bases);
                 for (b_idx, &r_idx) in landmark_indices.iter().enumerate() {
-                    let val = x[(r_idx, f_idx)];
-                    bases[b_idx] = if val.is_nan() { f_mean } else { val };
+                    basis[b_idx] = x_col[r_idx];
                 }
 
-                // Compute Landmark Kernel matrix K_mm: $k_{ij} = \exp(-\gamma ||u_i - u_j||^2)$
+                // Compute Landmark Kernel matrix K_mm
                 let mut k_mm = Mat::<f32>::zeros(self.num_bases, self.num_bases);
-                if is_categorical_f {
-                    for b_i_idx in 0..self.num_bases {
-                        for b_j_idx in b_i_idx..self.num_bases {
-                            let diff = bases[b_i_idx] - bases[b_j_idx];
-                            k_mm[(b_i_idx, b_j_idx)] = Self::kernel_categorical(diff);
+                for b_i_idx in 0..self.num_bases {
+                    for b_j_idx in b_i_idx..self.num_bases {
+                        k_mm[(b_i_idx, b_j_idx)] = kernel.eval(basis[b_i_idx], basis[b_j_idx]);
 
-                            // Symmetric: k_ij = k_ji
-                            if b_i_idx != b_j_idx {
-                                k_mm[(b_j_idx, b_i_idx)] = k_mm[(b_i_idx, b_j_idx)];
-                            }
-                        }
-                    }
-                } else {
-                    for b_i_idx in 0..self.num_bases {
-                        for b_j_idx in b_i_idx..self.num_bases {
-                            let diff = bases[b_i_idx] - bases[b_j_idx];
-                            k_mm[(b_i_idx, b_j_idx)] = Self::kernel_continuous(diff, s2_inv);
-
-                            // Symmetric: k_ij = k_ji
-                            if b_i_idx != b_j_idx {
-                                k_mm[(b_j_idx, b_i_idx)] = k_mm[(b_i_idx, b_j_idx)];
-                            }
+                        // Symmetric: k_ij = k_ji
+                        if b_i_idx != b_j_idx {
+                            k_mm[(b_j_idx, b_i_idx)] = k_mm[(b_i_idx, b_j_idx)];
                         }
                     }
                 }
@@ -191,53 +148,34 @@ impl KernelFeatureMap {
                     let val = eig.S()[p_idx];
                     let inv_sqrt_s = if val > 1e-5 { 1.0 / val.sqrt() } else { 0.0 };
                     // Efficiently scale each column by the inverse square root of eigenvalues
-                    for b_idx in 0..self.num_bases {
-                        proj_matrix[(b_idx, p_idx)] *= inv_sqrt_s;
-                    }
+                    let mut col = proj_matrix.col_mut(p_idx);
+                    col *= Scale(inv_sqrt_s);
                 }
 
                 // Compute feature means for centering without storing full $Z$ matrix
                 // Since $Z = K_{nm} P$, the column means are:
                 // $\text{mean}(Z) = \text{mean}(K_{nm}) P = (\frac{1}{n} \sum k_{i}) P$
                 let mut k_col_sums = Col::<f32>::zeros(self.num_bases);
-                if is_categorical_f {
-                    for r_idx in 0..n_samples {
-                        let x_val = x[(r_idx, f_idx)];
-                        if !x_val.is_nan() {
-                            for b_idx in 0..self.num_bases {
-                                let diff = x_val - bases[b_idx];
-                                k_col_sums[b_idx] += Self::kernel_categorical(diff);
-                            }
-                        }
-                    }
-                } else {
-                    for r_idx in 0..n_samples {
-                        let x_val = x[(r_idx, f_idx)];
-                        if !x_val.is_nan() {
-                            for b_idx in 0..self.num_bases {
-                                let diff = x_val - bases[b_idx];
-                                k_col_sums[b_idx] += Self::kernel_continuous(diff, s2_inv);
-                            }
-                        }
+                for &r_idx in &valid_indices {
+                    let x_val = x_col[r_idx];
+                    for b_idx in 0..self.num_bases {
+                        k_col_sums[b_idx] += kernel.eval(x_val, basis[b_idx]);
                     }
                 }
 
                 // Compute z_col_means using matrix-vector multiplication: z_col_means = P^T * (k_col_sums / n)
-                let mut z_col_means = proj_matrix.transpose() * &k_col_sums;
                 let scale = 1.0 / n_samples as f32;
-                for b_idx in 0..self.num_bases {
-                    z_col_means[b_idx] *= scale;
-                }
+                let z_col_means = (proj_matrix.transpose() * &k_col_sums) * Scale(scale);
 
-                (bases, proj_matrix, z_col_means, s2_inv)
+                (basis, proj_matrix, z_col_means, kernel)
             })
             .collect();
 
-        for (bases, proj, means, s2_inv) in feature_params {
+        for (bases, proj, means, kernel) in feature_params {
             self.feature_bases.push(bases);
             self.proj_matrices.push(proj);
             self.feature_means.push(means);
-            self.s2_invs.push(s2_inv);
+            self.kernels.push(kernel);
         }
     }
 
@@ -258,29 +196,16 @@ impl KernelFeatureMap {
         let bases = &self.feature_bases[f_idx];
         let proj = &self.proj_matrices[f_idx];
         let mean = &self.feature_means[f_idx];
-        let s2_inv = self.s2_invs[f_idx];
-        let is_categorical_f = self.is_categorical[f_idx];
+        let kernel = &self.kernels[f_idx];
+        let x_col = x.col(f_idx);
 
         // Z_f = K_f * proj_f - centering_mean
         let mut k_f = Mat::<f32>::zeros(n_samples, self.num_bases);
-        if is_categorical_f {
-            for r_idx in 0..n_samples {
-                let x_val = x[(r_idx, f_idx)];
-                if !x_val.is_nan() {
-                    for b_idx in 0..self.num_bases {
-                        let diff = x_val - bases[b_idx];
-                        k_f[(r_idx, b_idx)] = Self::kernel_categorical(diff);
-                    }
-                }
-            }
-        } else {
-            for r_idx in 0..n_samples {
-                let x_val = x[(r_idx, f_idx)];
-                if !x_val.is_nan() {
-                    for b_idx in 0..self.num_bases {
-                        let diff = x_val - bases[b_idx];
-                        k_f[(r_idx, b_idx)] = Self::kernel_continuous(diff, s2_inv);
-                    }
+        for r_idx in 0..n_samples {
+            let x_val = x_col[r_idx];
+            if !x_val.is_nan() {
+                for b_idx in 0..self.num_bases {
+                    k_f[(r_idx, b_idx)] = kernel.eval(x_val, bases[b_idx]);
                 }
             }
         }
@@ -292,7 +217,7 @@ impl KernelFeatureMap {
         for p_idx in 0..self.num_bases {
             let m_val = mean[p_idx];
             for r_idx in 0..n_samples {
-                if x[(r_idx, f_idx)].is_nan() {
+                if x_col[r_idx].is_nan() {
                     out[(r_idx, p_idx)] = 0.0;
                 } else {
                     out[(r_idx, p_idx)] -= m_val;
