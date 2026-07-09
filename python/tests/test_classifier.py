@@ -21,7 +21,7 @@ def test_classifier_fit_predict():
 
 def test_classifier_explain():
     np.random.seed(42)
-    n_samples = 50
+    n_samples = 100
     n_features = 3
     x = np.random.randn(n_samples, n_features).astype(np.float32)
     y = (x[:, 0] > 0).astype(np.float32)
