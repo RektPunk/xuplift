@@ -24,22 +24,23 @@ impl Kernel {
     }
 }
 
-/// A transformer that approximates kernel feature maps.
+/// A transformer that approximates kernel feature maps using the Nystr\"om method.
 pub struct KernelFeatureMap {
     /// Number of input features (columns).
     pub num_features: usize,
     /// Number of landmark points (basis functions) per feature.
     pub num_bases: usize,
-    /// Selected landmark samples from the training set.
-    /// Each entry in the vector contains the landmark values per feature.
+    /// Landmark values selected for each feature.
+    /// Each entry contains the landmark points of a single feature.
     pub feature_bases: Vec<Col<f32>>,
 
-    /// Learned projection matrices to map data into the kernel space
-    /// $P = U \Lambda^{-1/2}$, where $U$ and $\Lambda$ are the eigenvectors and eigenvalues of $K_{mm}$
+    /// Projection matrices that map kernel evaluations into the feature space.
+    /// Each matrix is computed as $P = U\Lambda^{-1/2}$, where
+    /// $U$ and $\Lambda$ are the eigenvectors and eigenvalues of $K_{mm}$.
     pub proj_matrices: Vec<Mat<f32>>,
-    /// Column-wise means of the transformed features for centering.
+    /// Mean feature vectors used to center the transformed features.
     pub feature_means: Vec<Col<f32>>,
-    /// The kernel function to use for each feature.
+    /// Kernel associated with each feature.
     pub kernels: Vec<Kernel>,
 }
 
@@ -55,7 +56,7 @@ impl KernelFeatureMap {
         }
     }
 
-    /// Fits the transformer to the input matrix X.
+    /// Fits the kernel feature map to the input matrix.
     pub fn fit(&mut self, x: MatRef<'_, f32>, is_categorical: &[bool]) {
         self.feature_bases.clear();
         self.proj_matrices.clear();
@@ -91,7 +92,7 @@ impl KernelFeatureMap {
                 } else {
                     Kernel::Rbf {
                         s2_inv: {
-                            // Use the inverse median distance as the rbf kernel inverse variance
+                            // Estimate the RBF kernel precision parameter using the median heuristic.
                             let mut dists_buf = vec![0.0f32; max_dist_pairs];
                             let mut dists_count = 0;
                             for b_i_idx in 0..self.num_bases {
@@ -114,7 +115,7 @@ impl KernelFeatureMap {
                             } else {
                                 1.0
                             };
-                            // Precision parameter $\gamma = 1 / (2 \cdot \text{median}^2)$
+
                             1.0 / (2.0 * (median.max(1e-4)).powi(2))
                         },
                     }
@@ -126,35 +127,29 @@ impl KernelFeatureMap {
                     basis[b_idx] = x_col[r_idx];
                 }
 
-                // Compute Landmark Kernel matrix K_mm
+                // Compute the landmark kernel matrix K_mm
                 let mut k_mm = Mat::<f32>::zeros(self.num_bases, self.num_bases);
                 for b_i_idx in 0..self.num_bases {
                     for b_j_idx in b_i_idx..self.num_bases {
                         k_mm[(b_i_idx, b_j_idx)] = kernel.eval(basis[b_i_idx], basis[b_j_idx]);
-
-                        // Symmetric: k_ij = k_ji
                         if b_i_idx != b_j_idx {
                             k_mm[(b_j_idx, b_i_idx)] = k_mm[(b_i_idx, b_j_idx)];
                         }
                     }
                 }
 
-                // Eigen-decomposition for symmetric inverse square root: $K_{mm}^{-1/2} = U \Lambda^{-1/2} U^T$
-                // This ensures that the transformed features are approximately orthonormal
+                // Compute the symmetric inverse square root of K_mm
                 let eig = k_mm.self_adjoint_eigen(faer::Side::Lower).unwrap();
                 let mut proj_matrix = eig.U().to_owned();
 
                 for p_idx in 0..self.num_bases {
                     let val = eig.S()[p_idx];
                     let inv_sqrt_s = if val > 1e-5 { 1.0 / val.sqrt() } else { 0.0 };
-                    // Efficiently scale each column by the inverse square root of eigenvalues
                     let mut col = proj_matrix.col_mut(p_idx);
                     col *= Scale(inv_sqrt_s);
                 }
 
-                // Compute feature means for centering without storing full $Z$ matrix
-                // Since $Z = K_{nm} P$, the column means are:
-                // $\text{mean}(Z) = \text{mean}(K_{nm}) P = (\frac{1}{n} \sum k_{i}) P$
+                // Compute the feature-space mean without explicitly forming Z
                 let mut k_col_sums = Col::<f32>::zeros(self.num_bases);
                 for &r_idx in &valid_indices {
                     let x_val = x_col[r_idx];
@@ -162,8 +157,6 @@ impl KernelFeatureMap {
                         k_col_sums[b_idx] += kernel.eval(x_val, basis[b_idx]);
                     }
                 }
-
-                // Compute z_col_means using matrix-vector multiplication: z_col_means = P^T * (k_col_sums / n)
                 let scale = 1.0 / n_samples as f32;
                 let z_col_means = (proj_matrix.transpose() * &k_col_sums) * Scale(scale);
 
@@ -179,27 +172,20 @@ impl KernelFeatureMap {
         }
     }
 
-    /// Transforms a specific feature column across all rows into its Nystrom kernel feature space.
-    ///
-    /// For a given feature index $f$ and input matrix $x$, it computes the mapped feature
-    /// for each projection component $p$ and stores it in the output matrix at position $(r, p)$:
-    /// $$\text{out}[r, p] = \left( \sum_{b=1}^m k(x_{r, f}, u_{f, b}) P_{f, bp} \right) - \mu_{f, p}$$
-    /// where $m$ is `num_bases`, $k$ is the RBF kernel, $P_f$ is the projection matrix,
-    /// and $\mu_f$ is the centering mean for that feature.
+    /// Transforms a single feature column into its Nystr\"om kernel feature space.
     pub fn transform_feature_into(
         &self,
         x: MatRef<'_, f32>,
         f_idx: usize,
         mut out: MatMut<'_, f32>,
     ) {
+        let x_col = x.col(f_idx);
         let n_samples = x.nrows();
         let bases = &self.feature_bases[f_idx];
         let proj = &self.proj_matrices[f_idx];
         let mean = &self.feature_means[f_idx];
         let kernel = &self.kernels[f_idx];
-        let x_col = x.col(f_idx);
 
-        // Z_f = K_f * proj_f - centering_mean
         let mut k_f = Mat::<f32>::zeros(n_samples, self.num_bases);
         for r_idx in 0..n_samples {
             let x_val = x_col[r_idx];
@@ -209,11 +195,8 @@ impl KernelFeatureMap {
                 }
             }
         }
-
-        // Matrix multiplication: out = K_f * proj_f
         out.copy_from(&(k_f.as_ref() * proj.as_ref()));
 
-        // Center the features in-place
         for p_idx in 0..self.num_bases {
             let m_val = mean[p_idx];
             for r_idx in 0..n_samples {
@@ -226,9 +209,7 @@ impl KernelFeatureMap {
         }
     }
 
-    /// Transforms the input matrix X into the joint Nystrom kernel feature space Z.
-    ///
-    /// The resulting matrix $Z$ has dimensions (n_samples x (num_features * num_bases)).
+    /// Transforms the input matrix into the concatenated feature space.
     pub fn transform(&self, x: MatRef<'_, f32>) -> Mat<f32> {
         let n_samples = x.nrows();
         let total_dim = self.num_features * self.num_bases;
