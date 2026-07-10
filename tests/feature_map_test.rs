@@ -10,10 +10,7 @@ fn test_feature_map_basic_functionality() {
 
     assert_eq!(map.num_features, 2);
     assert!(map.num_bases > 0);
-    assert_eq!(map.feature_bases.len(), 2);
-    assert_eq!(map.proj_matrices.len(), 2);
-    assert_eq!(map.feature_means.len(), 2);
-    assert_eq!(map.kernels.len(), 2);
+    assert_eq!(map.feature_params.len(), 2);
 }
 
 #[test]

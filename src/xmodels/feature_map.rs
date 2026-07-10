@@ -24,24 +24,27 @@ impl Kernel {
     }
 }
 
+pub struct FeatureParams {
+    /// Kernel associated with each feature.
+    kernel: Kernel,
+    /// Landmark values selected for each feature.
+    /// Each entry contains the landmark points of a single feature.
+    feature_basis: Col<f32>,
+    /// Projection matrices that map kernel evaluations into the feature space.
+    /// Each matrix is computed as $P = U\Lambda^{-1/2}$, where
+    /// $U$ and $\Lambda$ are the eigenvectors and eigenvalues of $K_{mm}$.
+    proj_matrix: Mat<f32>,
+    /// Mean feature vectors used to center the transformed features.
+    feature_mean: Col<f32>,
+}
+
 /// A transformer that approximates kernel feature maps using the Nystr\"om method.
 pub struct KernelFeatureMap {
     /// Number of input features (columns).
     pub num_features: usize,
     /// Number of landmark points (basis functions) per feature.
     pub num_bases: usize,
-    /// Landmark values selected for each feature.
-    /// Each entry contains the landmark points of a single feature.
-    pub feature_bases: Vec<Col<f32>>,
-
-    /// Projection matrices that map kernel evaluations into the feature space.
-    /// Each matrix is computed as $P = U\Lambda^{-1/2}$, where
-    /// $U$ and $\Lambda$ are the eigenvectors and eigenvalues of $K_{mm}$.
-    pub proj_matrices: Vec<Mat<f32>>,
-    /// Mean feature vectors used to center the transformed features.
-    pub feature_means: Vec<Col<f32>>,
-    /// Kernel associated with each feature.
-    pub kernels: Vec<Kernel>,
+    pub feature_params: Vec<FeatureParams>,
 }
 
 impl KernelFeatureMap {
@@ -49,24 +52,16 @@ impl KernelFeatureMap {
         Self {
             num_features: 0,
             num_bases: max_bases,
-            feature_bases: Vec::new(),
-            proj_matrices: Vec::new(),
-            feature_means: Vec::new(),
-            kernels: Vec::new(),
+            feature_params: Vec::new(),
         }
     }
 
     /// Fits the kernel feature map to the input matrix.
     pub fn fit(&mut self, x: MatRef<'_, f32>, is_categorical: &[bool]) {
-        self.feature_bases.clear();
-        self.proj_matrices.clear();
-        self.feature_means.clear();
-        self.kernels.clear();
-
         let n_samples = x.nrows();
         self.num_features = x.ncols();
 
-        let feature_params: Vec<_> = (0..self.num_features)
+        let feature_params: Vec<FeatureParams> = (0..self.num_features)
             .into_par_iter()
             .map(|f_idx| {
                 let x_col = x.col(f_idx);
@@ -80,15 +75,14 @@ impl KernelFeatureMap {
                     self.num_bases,
                     valid_indices.len()
                 );
-
                 for i in 0..self.num_bases {
                     let j = rng.random_range(i..valid_indices.len());
                     valid_indices.swap(i, j);
                 }
                 let landmark_indices = &valid_indices[..self.num_bases];
-                let mut basis = Col::<f32>::zeros(self.num_bases);
+                let mut feature_basis = Col::<f32>::zeros(self.num_bases);
                 for (b_idx, &r_idx) in landmark_indices.iter().enumerate() {
-                    basis[b_idx] = x_col[r_idx];
+                    feature_basis[b_idx] = x_col[r_idx];
                 }
 
                 let kernel = if is_categorical[f_idx] {
@@ -96,8 +90,11 @@ impl KernelFeatureMap {
                 } else {
                     Kernel::Rbf {
                         s2_inv: {
-                            let mean = basis.iter().sum::<f32>() / self.num_bases as f32;
-                            let variance = basis.iter().map(|&x| (x - mean).powi(2)).sum::<f32>()
+                            let mean = feature_basis.iter().sum::<f32>() / self.num_bases as f32;
+                            let variance = feature_basis
+                                .iter()
+                                .map(|&x| (x - mean).powi(2))
+                                .sum::<f32>()
                                 / (self.num_bases as f32 - 1.0).max(1.0);
                             let sigma = variance.sqrt();
 
@@ -110,7 +107,8 @@ impl KernelFeatureMap {
                 let mut k_mm = Mat::<f32>::zeros(self.num_bases, self.num_bases);
                 for b_i_idx in 0..self.num_bases {
                     for b_j_idx in b_i_idx..self.num_bases {
-                        k_mm[(b_i_idx, b_j_idx)] = kernel.eval(basis[b_i_idx], basis[b_j_idx]);
+                        k_mm[(b_i_idx, b_j_idx)] =
+                            kernel.eval(feature_basis[b_i_idx], feature_basis[b_j_idx]);
                         if b_i_idx != b_j_idx {
                             k_mm[(b_j_idx, b_i_idx)] = k_mm[(b_i_idx, b_j_idx)];
                         }
@@ -133,22 +131,22 @@ impl KernelFeatureMap {
                 for &r_idx in &valid_indices {
                     let x_val = x_col[r_idx];
                     for b_idx in 0..self.num_bases {
-                        k_col_sums[b_idx] += kernel.eval(x_val, basis[b_idx]);
+                        k_col_sums[b_idx] += kernel.eval(x_val, feature_basis[b_idx]);
                     }
                 }
                 let scale = 1.0 / n_samples as f32;
-                let z_col_means = (proj_matrix.transpose() * &k_col_sums) * Scale(scale);
+                let feature_mean = (proj_matrix.transpose() * &k_col_sums) * Scale(scale);
 
-                (basis, proj_matrix, z_col_means, kernel)
+                FeatureParams {
+                    feature_basis,
+                    proj_matrix,
+                    feature_mean,
+                    kernel,
+                }
             })
             .collect();
 
-        for (bases, proj, means, kernel) in feature_params {
-            self.feature_bases.push(bases);
-            self.proj_matrices.push(proj);
-            self.feature_means.push(means);
-            self.kernels.push(kernel);
-        }
+        self.feature_params = feature_params;
     }
 
     /// Transforms a single feature column into its Nystr\"om kernel feature space.
@@ -160,24 +158,27 @@ impl KernelFeatureMap {
     ) {
         let x_col = x.col(f_idx);
         let n_samples = x.nrows();
-        let bases = &self.feature_bases[f_idx];
-        let proj = &self.proj_matrices[f_idx];
-        let mean = &self.feature_means[f_idx];
-        let kernel = &self.kernels[f_idx];
+        let FeatureParams {
+            feature_basis,
+            proj_matrix,
+            feature_mean,
+            kernel,
+        } = &self.feature_params[f_idx];
 
         let mut k_f = Mat::<f32>::zeros(n_samples, self.num_bases);
         for r_idx in 0..n_samples {
             let x_val = x_col[r_idx];
             if !x_val.is_nan() {
                 for b_idx in 0..self.num_bases {
-                    k_f[(r_idx, b_idx)] = kernel.eval(x_val, bases[b_idx]);
+                    k_f[(r_idx, b_idx)] = kernel.eval(x_val, feature_basis[b_idx]);
                 }
             }
         }
-        out.copy_from(&(k_f.as_ref() * proj.as_ref()));
+
+        out.copy_from(&(k_f.as_ref() * proj_matrix.as_ref()));
 
         for p_idx in 0..self.num_bases {
-            let m_val = mean[p_idx];
+            let m_val = feature_mean[p_idx];
             for r_idx in 0..n_samples {
                 if x_col[r_idx].is_nan() {
                     out[(r_idx, p_idx)] = 0.0;
