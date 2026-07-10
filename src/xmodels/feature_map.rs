@@ -65,7 +65,7 @@ impl KernelFeatureMap {
 
         let n_samples = x.nrows();
         self.num_features = x.ncols();
-        let max_dist_pairs = self.num_bases * (self.num_bases - 1) / 2;
+
         let feature_params: Vec<_> = (0..self.num_features)
             .into_par_iter()
             .map(|f_idx| {
@@ -86,46 +86,25 @@ impl KernelFeatureMap {
                     valid_indices.swap(i, j);
                 }
                 let landmark_indices = &valid_indices[..self.num_bases];
-                let is_categorical_f = is_categorical[f_idx];
-                let kernel = if is_categorical_f {
-                    Kernel::Categorical
-                } else {
-                    Kernel::Rbf {
-                        s2_inv: {
-                            // Estimate the RBF kernel precision parameter using the median heuristic.
-                            let mut dists_buf = vec![0.0f32; max_dist_pairs];
-                            let mut dists_count = 0;
-                            for b_i_idx in 0..self.num_bases {
-                                let val_i = x_col[landmark_indices[b_i_idx]];
-                                for b_j_idx in b_i_idx + 1..self.num_bases {
-                                    dists_buf[dists_count] =
-                                        (val_i - x_col[landmark_indices[b_j_idx]]).abs();
-                                    dists_count += 1;
-                                }
-                            }
-                            let dists = &mut dists_buf[..dists_count];
-                            dists.sort_by(|a, b| a.total_cmp(b));
-                            let median = if !dists.is_empty() {
-                                let mid = dists.len() / 2;
-                                if dists.len().is_multiple_of(2) {
-                                    (dists[mid] + dists[mid - 1]) * 0.5
-                                } else {
-                                    dists[mid]
-                                }
-                            } else {
-                                1.0
-                            };
-
-                            1.0 / (2.0 * (median.max(1e-4)).powi(2))
-                        },
-                    }
-                };
-
-                // Store landmark values
                 let mut basis = Col::<f32>::zeros(self.num_bases);
                 for (b_idx, &r_idx) in landmark_indices.iter().enumerate() {
                     basis[b_idx] = x_col[r_idx];
                 }
+
+                let kernel = if is_categorical[f_idx] {
+                    Kernel::Categorical
+                } else {
+                    Kernel::Rbf {
+                        s2_inv: {
+                            let mean = basis.iter().sum::<f32>() / self.num_bases as f32;
+                            let variance = basis.iter().map(|&x| (x - mean).powi(2)).sum::<f32>()
+                                / (self.num_bases as f32 - 1.0).max(1.0);
+                            let sigma = variance.sqrt();
+
+                            1.0 / (2.0 * (sigma.max(1e-4)).powi(2))
+                        },
+                    }
+                };
 
                 // Compute the landmark kernel matrix K_mm
                 let mut k_mm = Mat::<f32>::zeros(self.num_bases, self.num_bases);
