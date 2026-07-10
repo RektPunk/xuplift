@@ -4,37 +4,34 @@ use xuplift::xmodels::feature_map::KernelFeatureMap;
 #[test]
 fn test_feature_map_basic_functionality() {
     let data = Mat::from_fn(10, 2, |r, c| (r as f32) + (c as f32));
-    let mut map = KernelFeatureMap::new(64);
+    let mut map = KernelFeatureMap::new(5);
     let is_categorical = vec![false; 2];
     map.fit(data.as_ref(), &is_categorical);
 
     assert_eq!(map.num_features, 2);
     assert!(map.num_bases > 0);
-    assert_eq!(map.feature_bases.len(), 2);
-    assert_eq!(map.proj_matrices.len(), 2);
-    assert_eq!(map.feature_means.len(), 2);
-    assert_eq!(map.s2_invs.len(), 2);
+    assert_eq!(map.feature_params.len(), 2);
 }
 
 #[test]
 fn test_transform_feature_into() {
-    let data = Mat::from_fn(5, 2, |r, c| (r as f32) * (c as f32 + 1.0));
-    let mut map = KernelFeatureMap::new(64);
+    let data = Mat::from_fn(10, 2, |r, c| (r as f32) * (c as f32 + 1.0));
+    let mut map = KernelFeatureMap::new(5);
     let is_categorical = vec![false; 2];
     map.fit(data.as_ref(), &is_categorical);
 
     for f_idx in 0..map.num_features {
-        let mut transformed = Mat::<f32>::zeros(5, map.num_bases);
+        let mut transformed = Mat::<f32>::zeros(10, map.num_bases);
         map.transform_feature_into(data.as_ref(), f_idx, transformed.as_mut());
-        assert_eq!(transformed.nrows(), 5);
+        assert_eq!(transformed.nrows(), 10);
         assert_eq!(transformed.ncols(), map.num_bases);
     }
 }
 
 #[test]
 fn test_full_transform_matches_feature_transform() {
-    let data = Mat::from_fn(5, 2, |r, c| (r as f32) + (c as f32));
-    let mut map = KernelFeatureMap::new(64);
+    let data = Mat::from_fn(10, 2, |r, c| (r as f32) + (c as f32));
+    let mut map = KernelFeatureMap::new(5);
 
     let is_categorical = vec![false; 2];
     map.fit(data.as_ref(), &is_categorical);
@@ -42,10 +39,10 @@ fn test_full_transform_matches_feature_transform() {
     let full_transformed = map.transform(data.as_ref());
 
     for f_idx in 0..map.num_features {
-        let mut transformed_feat = Mat::<f32>::zeros(5, map.num_bases);
+        let mut transformed_feat = Mat::<f32>::zeros(10, map.num_bases);
         map.transform_feature_into(data.as_ref(), f_idx, transformed_feat.as_mut());
         let offset = f_idx * map.num_bases;
-        for r_idx in 0..5 {
+        for r_idx in 0..10 {
             for b in 0..map.num_bases {
                 let feat_val = transformed_feat[(r_idx, b)];
                 let full_val = full_transformed[(r_idx, offset + b)];
@@ -74,7 +71,7 @@ fn test_nan_handling_in_feature_map() {
         _ => 0.0,
     });
 
-    let mut map = KernelFeatureMap::new(64);
+    let mut map = KernelFeatureMap::new(3);
     let is_categorical = vec![false; 1];
     map.fit(data.as_ref(), &is_categorical);
 
