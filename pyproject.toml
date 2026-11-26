@@ -1,15 +1,11 @@
 [project]
 name = "xuplift"
-version = "0.3.1"
+version = "0.3.2"
 description = "Explainable uplift modeling via linearized kernel feature maps."
-authors = [
-    {name = "RektPunk", email = "rektpunk@gmail.com"},
-]
+authors = [{ name = "RektPunk", email = "rektpunk@gmail.com" }]
 readme = "README.md"
-requires-python = ">=3.8"
-dependencies = [
-    "numpy>=1.24.4",
-]
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24.4"]
 
 [project.urls]
 repository = "https://github.com/RektPunk/xuplift"
@@ -25,5 +21,5 @@ include = ["python/xuplift/*.pyi", "python/xuplift/py.typed"]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.5",
+    "pytest==9.2.0",
 ]
