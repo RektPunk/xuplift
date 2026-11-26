@@ -147,16 +147,15 @@ impl Regressor {
         let n_samples = z.nrows();
         let total_dim = z.ncols();
 
-        let n_features = self.kernel_feature_map.as_ref().unwrap().num_features;
         let n_bases = self.kernel_feature_map.as_ref().unwrap().num_bases;
 
         // Stack all coefficients into one big column
         let mut all_coeffs = Col::<f32>::zeros(total_dim);
-        for f_idx in 0..n_features {
+        for (f_idx, coefficients) in self.coefficients.iter().enumerate() {
             all_coeffs
                 .as_mut()
                 .subrows_mut(f_idx * n_bases, n_bases)
-                .copy_from(&self.coefficients[f_idx]);
+                .copy_from(coefficients);
         }
 
         // Prediction: y_hat = Z * coefficients + base_value
